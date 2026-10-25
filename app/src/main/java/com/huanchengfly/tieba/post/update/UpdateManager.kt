@@ -269,6 +269,6 @@ class UpdateManager @Inject constructor(
 
     companion object {
         const val EXTRA_INSTALL_UPDATE = "update_install"
-        private const val RELEASES_URL = "https://github.com/makise2060/FluxTie/releases"
+        private const val RELEASES_URL = "https://github.com/Yuxiximyxx/FluxTie/releases"
     }
 }

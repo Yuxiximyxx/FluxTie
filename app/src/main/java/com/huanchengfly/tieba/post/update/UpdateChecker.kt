@@ -145,7 +145,7 @@ class UpdateChecker @Inject constructor(
     }
 
     companion object {
-        private const val API_BASE = "https://api.github.com/repos/makise2060/FluxTie"
+        private const val API_BASE = "https://api.github.com/repos/Yuxiximyxx/FluxTie"
         private const val CACHE_TTL_MS = 60 * 60 * 1000L // 1h
     }
 }

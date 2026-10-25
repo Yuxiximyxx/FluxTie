@@ -82,7 +82,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val REPO_URL = "https://github.com/makise2060/FluxTie"
+private const val REPO_URL = "https://github.com/Yuxiximyxx/FluxTie"
 
 @Destination
 @Composable
