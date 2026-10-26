@@ -78,6 +78,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.ActionItem
 import com.huanchengfly.tieba.post.ui.widgets.compose.LazyLoadHorizontalPager
 import com.huanchengfly.tieba.post.ui.widgets.compose.PagerTabIndicator
 import com.huanchengfly.tieba.post.ui.widgets.compose.TabRow
+import com.huanchengfly.tieba.post.ui.widgets.compose.MiuixMainTopBar
 import com.huanchengfly.tieba.post.ui.widgets.compose.Toolbar
 import com.huanchengfly.tieba.post.ui.widgets.compose.accountNavIconIfCompact
 import com.huanchengfly.tieba.post.utils.AccountUtil.LocalAccount
@@ -327,7 +328,7 @@ fun ExplorePage() {
                             )
                             .onSizeChanged { titleBarHeight = it.height.toFloat() }
                     ) {
-                        Toolbar(
+                        MiuixMainTopBar(
                             title = stringResource(id = R.string.title_explore),
                             insets = false,
                             navigationIcon = accountNavIconIfCompact(),

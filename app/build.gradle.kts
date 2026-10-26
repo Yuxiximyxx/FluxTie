@@ -163,9 +163,12 @@ dependencies {
     implementation(libs.material.kolor)
     implementation("androidx.compose.material3:material3")
 
-    // 悬浮底栏毛玻璃
-    implementation(libs.haze)
-    implementation(libs.haze.blur)
+    // MIUIX 真组件（主题层 + 主标签顶栏）
+    implementation(libs.miuix)
+
+    // 液态玻璃（Dock 与悬浮按钮的统一玻璃材质，Kyant backdrop 真采样 + 折射）
+    implementation(libs.kyant.backdrop)
+    implementation(libs.kyant.shapes)
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)

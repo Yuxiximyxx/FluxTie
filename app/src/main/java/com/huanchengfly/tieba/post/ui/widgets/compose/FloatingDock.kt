@@ -46,7 +46,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -81,11 +80,7 @@ import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedColors
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.huanchengfly.tieba.post.ui.common.theme.compose.White
 import com.huanchengfly.tieba.post.ui.page.main.NavigationItem
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.HazeColorEffect
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import com.kyant.backdrop.backdrops.LayerBackdrop
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -93,11 +88,12 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-/** 外壳高度：64dp 全胶囊。 */
-private val DockShellHeight = 64.dp
+/** 外壳高度：68dp 全胶囊（跨应用统一悬浮 Dock 规格）。 */
+private val DockShellHeight = 68.dp
 
-/** 外壳水平外边距。 */
-private val DockHorizontalMargin = 16.dp
+/** 外壳宽度占屏比（统一规格约 58% 居中）与平板防拉伸上限。 */
+private const val DockWidthFraction = 0.58f
+private val DockMaxWidth = 400.dp
 
 /** 外壳距系统导航栏的底边距。 */
 private val DockBottomMargin = 12.dp
@@ -105,24 +101,17 @@ private val DockBottomMargin = 12.dp
 /** 外壳内左右留白：首末槽位不贴胶囊边缘。 */
 private val DockInnerHorizontalPadding = 8.dp
 
-/** 静止指示器高度：壳高 64dp 上下各留 4dp（= 壳高 × 4/64）。 */
-private val DockIndicatorRestHeight = 56.dp
+/** 静止指示器高度：壳高 68dp 上下各留 5dp。 */
+private val DockIndicatorRestHeight = 58.dp
 
-/** 按下 bloom 目标高度 78dp（≈1.39×）。 */
-private const val DockIndicatorPressScale = 78f / 56f
+/** 按下 bloom 目标高度 78dp。 */
+private const val DockIndicatorPressScale = 78f / 58f
 
-/** 按下时壳整体放大的宽度量（64dp 壳基准 16dp，按壳宽比例缩放）。 */
+/** 按下时壳整体放大的宽度量（按壳宽比例缩放）。 */
 private val DockPressBloomDp = 16.dp
 
 /** 按下时条目内容放大比例（1 + 0.2）。 */
 private const val DockTabPressScaleExtra = 0.2f
-
-/** 毛玻璃模糊半径（平衡档）。 */
-private val DockBlurRadius = 10.dp
-
-/** 壳底色透明度：有模糊时更低（让模糊透出），无模糊时更高（替代纯色）。 */
-private const val DockSurfaceAlphaBlur = 0.50f
-private const val DockSurfaceAlphaFallback = 0.88f
 
 /**
  * 外圈微光晕分层（宽度 dp, alpha 系数）：多层同心描边、系数向外指数递减，
@@ -173,8 +162,10 @@ private val DockRubberBand = 4.dp
 fun supportsBackdropBlur(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /**
- * 悬浮毛玻璃 Dock：64dp 全胶囊壳（背景模糊 + 高光 rim + 投影）+
- * 弹性胶囊指示器（spring 位移 + 按下 bloom + 速度形变 + 拖拽跟手）。
+ * 悬浮 Dock（跨应用统一规格：宽约 58% 居中、68dp 全胶囊）：
+ * Kyant 液态玻璃壳（背景采样 + 饱和/模糊/折射，参数由「玻璃材质」设置驱动）+
+ * 弹性胶囊指示器（spring 位移 + 按下 bloom + 速度形变 + 拖拽跟手）；
+ * 选中项为深色椭圆高亮，内竖排「图标在上 + 文字在下」用强调色，未选中只露图标。
  *
  * 交互：
  * - 单击条目：切换 / 再次点击当前项触发刷新；
@@ -182,7 +173,7 @@ fun supportsBackdropBlur(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_COD
  *   松手落定并切换（面板整体带 4dp rubber-band 跟手位移）；
  * - 条目图标常显，仅指示器所在的条目展开名称。
  *
- * API < 31 自动降级为增强半透明纯色壳（不挂模糊）。
+ * API < 31 自动降级为增强半透明纯色壳（不挂采样）。
  */
 @Composable
 fun FloatingDock(
@@ -190,10 +181,11 @@ fun FloatingDock(
     onChangePosition: (position: Int) -> Unit,
     onReselected: (position: Int) -> Unit,
     navigationItems: ImmutableList<NavigationItem>,
-    hazeState: HazeState,
+    backdrop: LayerBackdrop?,
     themeColors: ExtendedColors = ExtendedTheme.colors,
 ) {
     val blurSupported = supportsBackdropBlur()
+    val glassSpec = rememberGlassSettings().spec
     val itemCount = navigationItems.size
     val maxIndex = (itemCount - 1).coerceAtLeast(0)
     val scope = rememberCoroutineScope()
@@ -254,14 +246,17 @@ fun FloatingDock(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = DockHorizontalMargin)
                 .height(DockShellHeight)
         ) {
-            val slotWidth = (maxWidth - DockInnerHorizontalPadding * 2) / itemCount
+            // 统一规格：壳宽 = 屏宽 × 58%（平板封顶 DockMaxWidth），水平居中
+            val shellWidth = (maxWidth * DockWidthFraction).coerceAtMost(DockMaxWidth)
+            val slotWidth = (shellWidth - DockInnerHorizontalPadding * 2) / itemCount
             val density = LocalDensity.current
             val slotWidthPx = with(density) { slotWidth.toPx() }
             val innerPaddingPx = with(density) { DockInnerHorizontalPadding.toPx() }
             val totalWidthPx = with(density) { maxWidth.toPx() }
+            val shellWidthPx = with(density) { shellWidth.toPx() }
+            val shellLeftPx = (totalWidthPx - shellWidthPx) / 2f
             val rubberBandPx = with(density) { DockRubberBand.toPx() }
 
             // rubber-band 面板偏移：拖拽越远偏移越大（4dp 上限，EaseOut 缓动）
@@ -276,9 +271,11 @@ fun FloatingDock(
 
             val shape = CircleShape
             val isNight = themeColors.isNightMode
-            val surfaceTint = themeColors.bottomBarSurface.copy(
-                alpha = if (blurSupported) DockSurfaceAlphaBlur else DockSurfaceAlphaFallback
-            )
+            // 叠纱来自玻璃设置的有效参数；无采样降级时提 alpha 替代（与 Glass.kt 降级口径一致）
+            val surfaceTint = glassTintColor(isNight, glassSpec).let { tint ->
+                if (blurSupported) tint
+                else tint.copy(alpha = (tint.alpha + 0.38f).coerceAtMost(0.92f))
+            }
             val shadowAlpha = if (isNight) 0.22f else 0.13f
             // 双峰轮廓光：顶部高光弧（白）；底部次级弧——浅色下用暗边勾勒边界（白线在近白背景上不可见），
             // 夜间/AMOLED 用次级白色反光
@@ -307,9 +304,11 @@ fun FloatingDock(
             // 玻璃壳（均匀材质；裁切到胶囊。指示器 bloom 越界由指示器层负责，壳不参与）
             Box(
                 modifier = Modifier
-                    .matchParentSize()
+                    .align(Alignment.Center)
+                    .width(shellWidth)
+                    .height(DockShellHeight)
                     .graphicsLayer {
-                        val s = 1f + pressBloomPx / totalWidthPx.coerceAtLeast(1f) *
+                        val s = 1f + pressBloomPx / shellWidthPx.coerceAtLeast(1f) *
                             pressProgress.value
                         scaleX = s
                         scaleY = s
@@ -339,20 +338,14 @@ fun FloatingDock(
                     }
                     .clip(shape)
                     .then(
-                        if (blurSupported) {
-                            Modifier.hazeEffect(state = hazeState) {
-                                blurEffect {
-                                    style = HazeBlurStyle(
-                                        backgroundColor = Color.Transparent,
-                                        colorEffects = emptyList(),
-                                        blurRadius = DockBlurRadius,
-                                        noiseFactor = 0f,
-                                        fallbackColorEffect = HazeColorEffect.tint(surfaceTint),
-                                    )
-                                    blurEnabled = true
-                                    blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-                                }
-                            }
+                        if (blurSupported && backdrop != null) {
+                            Modifier.glassSurface(
+                                backdrop = backdrop,
+                                spec = glassSpec,
+                                isNightMode = isNight,
+                                shape = shape,
+                                drawTint = false,
+                            )
                         } else Modifier
                     )
                     .background(surfaceTint)
@@ -365,22 +358,23 @@ fun FloatingDock(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .offset(y = -DockIndicatorVisualLift),
-                positionPx = innerPaddingPx + dragPosition.value * slotWidthPx,
+                positionPx = shellLeftPx + innerPaddingPx + dragPosition.value * slotWidthPx,
                 widthPx = slotWidthPx,
                 pressedScaleX = indicatorScaleX.value,
                 pressedScaleY = indicatorScaleY.value,
                 velocity = velocity.value,
                 panelOffsetPx = panelOffsetPx,
                 isNightMode = themeColors.isNightMode,
-                hazeState = hazeState,
-                blurSupported = blurSupported,
-                surfaceTint = surfaceTint,
+                backdrop = if (blurSupported) backdrop else null,
+                spec = glassSpec,
             )
 
             // 槽位内容：名称展开与配色由指示器位置驱动（拖拽经过时实时切换）
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .align(Alignment.Center)
+                    .width(shellWidth)
+                    .fillMaxHeight()
                     .padding(horizontal = DockInnerHorizontalPadding)
                     .graphicsLayer {
                         translationX = panelOffsetPx()
@@ -431,7 +425,7 @@ fun FloatingDock(
                     .align(Alignment.CenterStart)
                     .offset {
                         IntOffset(
-                            (innerPaddingPx + dragPosition.value * slotWidthPx + panelOffsetPx())
+                            (shellLeftPx + innerPaddingPx + dragPosition.value * slotWidthPx + panelOffsetPx())
                                 .roundToInt(),
                             0
                         )
@@ -549,11 +543,9 @@ private fun DockIndicator(
     velocity: Float,
     panelOffsetPx: () -> Float,
     isNightMode: Boolean,
-    hazeState: HazeState,
-    blurSupported: Boolean,
-    surfaceTint: Color,
+    backdrop: LayerBackdrop?,
+    spec: GlassSpec,
 ) {
-    val indicatorColor = if (isNightMode) Color.White else Color.Black
     val shape = CircleShape
     // 按压进度（0..1）：驱动填充淡出、顶部高光增强与光晕增强
     val bloomProgress =
@@ -611,36 +603,27 @@ private fun DockIndicator(
             }
             .clip(shape)
             .then(
-                // 玻璃透镜：指示器自身采样背景模糊，按压放大越出壳体的部分也能透出模糊内容
-                if (blurSupported) {
-                    Modifier.hazeEffect(state = hazeState) {
-                        blurEffect {
-                            style = HazeBlurStyle(
-                                backgroundColor = Color.Transparent,
-                                colorEffects = emptyList(),
-                                blurRadius = DockBlurRadius,
-                                noiseFactor = 0f,
-                                fallbackColorEffect = HazeColorEffect.tint(Color.Transparent),
-                            )
-                            blurEnabled = true
-                            blurredEdgeTreatment = BlurredEdgeTreatment(shape)
-                        }
-                    }
+                // 玻璃透镜：指示器自身采样背景（饱和+模糊+折射），按压放大越出壳体的部分也能透出内容
+                if (backdrop != null) {
+                    Modifier.glassSurface(
+                        backdrop = backdrop,
+                        spec = spec,
+                        isNightMode = isNightMode,
+                        shape = shape,
+                        drawTint = false,
+                    )
                 } else Modifier
             )
             .drawBehind {
                 val cornerRadius = CornerRadius(size.height / 2f)
-                // 壳体同款底色打底：指示器=「模糊(内容)+壳底色+指示色」，等效于壳上叠一块玻璃透镜
-                // （无模糊降级时指示器为不透明纯色块）；按压放大越界部分呈现与壳一致的玻璃材质
-                drawRoundRect(color = surfaceTint, cornerRadius = cornerRadius)
-                // 选中指示色：静止时 10% 托底；按压时淡出至 3% 残量（玻璃透镜仍可辨，避免完全融入壳体）
-                val fillAlpha = if (blurSupported) {
-                    0.10f * (1f - 0.7f * bloomProgress)
-                } else 0.10f
-                drawRoundRect(
-                    color = indicatorColor.copy(alpha = fillAlpha),
-                    cornerRadius = cornerRadius,
-                )
+                // 统一规格：选中 = 深色椭圆高亮（浅色近黑实色、夜间黑半透），其上承载强调色图标+文字；
+                // 按压时略微变透，让透镜折射透出来，避免完全压死玻璃感
+                val darkFill = if (isNightMode) {
+                    Color.Black.copy(alpha = 0.55f * (1f - 0.15f * bloomProgress))
+                } else {
+                    Color(0xFF1B1C1F).copy(alpha = 0.92f * (1f - 0.15f * bloomProgress))
+                }
+                drawRoundRect(color = darkFill, cornerRadius = cornerRadius)
                 drawRoundRect(
                     brush = rimGlowBrush,
                     cornerRadius = cornerRadius,
@@ -686,9 +669,11 @@ private fun DockItem(
         )
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+    // 统一规格：竖排——图标在上、文字在下；文字高度/透明度由指示器进度驱动，
+    // 未选中（progress=0）只露图标，拖拽经过的条目实时展开
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(24.dp))
@@ -714,7 +699,7 @@ private fun DockItem(
                 contentDescription = title,
                 tint = color,
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(22.dp)
                     .graphicsLayer {
                         scaleX = iconScale.value
                         scaleY = iconScale.value
@@ -741,18 +726,18 @@ private fun DockItem(
             Text(
                 text = title,
                 maxLines = 1,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 modifier = Modifier
                     .alpha((progress * progress * progress).coerceIn(0f, 1f))
                     .layout { measurable, _ ->
                         val placeable = measurable.measure(Constraints())
-                        layout((placeable.width * progress).roundToInt(), placeable.height) {
+                        layout(placeable.width, (placeable.height * progress).roundToInt()) {
                             placeable.placeRelative(0, 0)
                         }
                     }
-                    .padding(start = 6.dp)
+                    .padding(top = 1.dp)
             )
         }
     }

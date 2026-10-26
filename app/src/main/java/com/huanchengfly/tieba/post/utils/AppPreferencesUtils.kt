@@ -159,6 +159,12 @@ open class AppPreferencesUtils private constructor(ctx: Context) {
     var liftUpBottomBar by DataStoreDelegates.boolean(defaultValue = true)
     var floatingBottomNav by DataStoreDelegates.boolean(defaultValue = true)
 
+    /** 玻璃材质（Dock 与悬浮按钮）：frosted 磨砂（默认）/ clear 毛玻璃 / liquid 液态，取值见 GlassMaterial.key */
+    var glassMaterial by DataStoreDelegates.string(
+        key = "glass_material",
+        defaultValue = "frosted"
+    )
+
     var listItemsBackgroundIntermixed by DataStoreDelegates.boolean(defaultValue = true)
 
     var listSingle by DataStoreDelegates.boolean(defaultValue = false)

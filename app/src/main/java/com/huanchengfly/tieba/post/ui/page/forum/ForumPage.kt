@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.LinearProgressIndicator
@@ -108,6 +107,11 @@ import com.huanchengfly.tieba.post.ui.page.forum.generaltablist.GeneralTabListUi
 import com.huanchengfly.tieba.post.ui.page.forum.threadlist.ForumThreadListPage
 import com.huanchengfly.tieba.post.ui.page.forum.threadlist.ForumThreadListUiEvent
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
+import com.huanchengfly.tieba.post.ui.widgets.compose.GlassFloatingActionButton
+import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
+import com.huanchengfly.tieba.post.ui.widgets.compose.supportsGlassSampling
 import com.huanchengfly.tieba.post.ui.widgets.compose.AvatarPlaceholder
 import com.huanchengfly.tieba.post.ui.widgets.compose.BackNavigationIcon
 import com.huanchengfly.tieba.post.ui.widgets.compose.Button
@@ -376,6 +380,9 @@ fun ForumPage(
     navigator: DestinationsNavigator
 ) {
     val context = LocalContext.current
+    // 发帖 FAB 的液态玻璃：采样源录制帖子列表内容，参数由「玻璃材质」设置驱动
+    val glassBackdrop = rememberGlassBackdrop()
+    val glassSettings = rememberGlassSettings()
     LazyLoad(loaded = viewModel.initialized) {
         viewModel.send(ForumUiIntent.Load(forumName, getSortType(context, forumName)))
         viewModel.initialized = true
@@ -662,7 +669,7 @@ fun ForumPage(
                 },
                 floatingActionButton = {
                     if (context.appPreferences.forumFabFunction != "hide" || (context.appPreferences.hideReply == true && context.appPreferences.forumFabFunction == "post")) {
-                        FloatingActionButton(
+                        GlassFloatingActionButton(
                             onClick = {
                                 when (context.appPreferences.forumFabFunction) {
                                     "refresh" -> {
@@ -712,8 +719,11 @@ fun ForumPage(
                                     }
                                 }
                             },
-                            backgroundColor = ExtendedTheme.colors.windowBackground,
-                            contentColor = ExtendedTheme.colors.primary,
+                            backdrop = if (supportsGlassSampling()) glassBackdrop else null,
+                            spec = glassSettings.spec,
+                            isNightMode = ExtendedTheme.colors.isNightMode,
+                            fallbackBackgroundColor = ExtendedTheme.colors.windowBackground,
+                            fallbackContentColor = ExtendedTheme.colors.primary,
                             modifier = Modifier.navigationBarsPadding()
                         ) {
                             Icon(
@@ -739,6 +749,7 @@ fun ForumPage(
                 PullToRefreshLayout(
                     refreshing = isFakeLoading,
                     enabled = enablePullToRefresh,
+                    modifier = Modifier.glassBackdropSource(glassBackdrop),
                     onRefresh = {
                         coroutineScope.emitGlobalEvent(
                             ForumThreadListUiEvent.Refresh(

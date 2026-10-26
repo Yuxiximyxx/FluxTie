@@ -96,6 +96,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.MyLazyVerticalGrid
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
 import com.huanchengfly.tieba.post.ui.widgets.compose.TextButton
 import com.huanchengfly.tieba.post.ui.widgets.compose.TipScreen
+import com.huanchengfly.tieba.post.ui.widgets.compose.MiuixMainTopBar
 import com.huanchengfly.tieba.post.ui.widgets.compose.Toolbar
 import com.huanchengfly.tieba.post.ui.widgets.compose.accountNavIconIfCompact
 import com.huanchengfly.tieba.post.ui.widgets.compose.debounceClickable
@@ -448,7 +449,7 @@ fun HomePage(
     MyScaffold(
         backgroundColor = Color.Transparent,
         topBar = {
-            Toolbar(
+            MiuixMainTopBar(
                 title = stringResource(id = R.string.title_main),
                 navigationIcon = accountNavIconIfCompact(),
                 actions = {

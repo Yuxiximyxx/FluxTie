@@ -66,6 +66,8 @@ import com.huanchengfly.tieba.post.ui.utils.DevicePosture
 import com.huanchengfly.tieba.post.ui.utils.MainNavigationContentPosition
 import com.huanchengfly.tieba.post.ui.utils.MainNavigationType
 import com.huanchengfly.tieba.post.ui.widgets.compose.FloatingDock
+import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
 import com.huanchengfly.tieba.post.ui.widgets.compose.SplashState
 import com.huanchengfly.tieba.post.ui.widgets.compose.supportsBackdropBlur
@@ -73,8 +75,6 @@ import com.huanchengfly.tieba.post.utils.appPreferences
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootNavGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
@@ -296,8 +296,8 @@ fun MainPage(
         key = booleanPreferencesKey("floatingBottomNav"),
         defaultValue = LocalContext.current.appPreferences.floatingBottomNav
     )
-    // 毛玻璃底栏的模糊源:内容层录制为 haze 源,悬浮 Dock 从中采样(仅 API 31+ 启用)
-    val hazeState = remember { HazeState() }
+    // 液态玻璃底栏的采样源：内容层录制为 backdrop，悬浮 Dock 从中采样（仅 API 31+ 启用）
+    val glassBackdrop = rememberGlassBackdrop()
     val backdropBlurSupported = supportsBackdropBlur()
     val saveableStateHolder = rememberSaveableStateHolder()
     // 真悬浮布局:胶囊叠于内容之上,内容 edge-to-edge;经典贴底/Rail 模式沿用 Scaffold 避让
@@ -351,7 +351,7 @@ fun MainPage(
                                 .fillMaxSize()
                                 .then(
                                     if (floatingLayout && backdropBlurSupported) {
-                                        Modifier.hazeSource(hazeState)
+                                        Modifier.glassBackdropSource(glassBackdrop)
                                     } else Modifier
                                 ),
                         ) { page ->
@@ -368,7 +368,7 @@ fun MainPage(
                                     onChangePosition = onChangePosition,
                                     onReselected = onReselected,
                                     navigationItems = navigationItems,
-                                    hazeState = hazeState,
+                                    backdrop = if (backdropBlurSupported) glassBackdrop else null,
                                     themeColors = themeColors,
                                 )
                             }

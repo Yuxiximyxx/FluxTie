@@ -54,6 +54,7 @@ fun PullToRefreshLayout(
     refreshingOffset: Dp = PullToRefreshDefaults.RefreshingOffset,
     threshold: Float = 0.75f,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -81,7 +82,7 @@ fun PullToRefreshLayout(
             swipeableState.offset.value + refreshDistancePx
         }
     }
-    Box {
+    Box(modifier = modifier) {
         Box(
             modifier = Modifier
                 .nestedScroll(swipeableState.LoadPreUpPostDownNestedScrollConnection)

@@ -41,11 +41,13 @@ import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.NightsStay
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoSizeSelectActual
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Upcoming
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +64,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.huanchengfly.tieba.post.App
 import com.materialkolor.PaletteStyle
@@ -82,7 +86,13 @@ import com.huanchengfly.tieba.post.ui.page.settings.components.SwitchSettingRow
 import com.huanchengfly.tieba.post.ui.page.settings.custom.components.ColorDotGrid
 import com.huanchengfly.tieba.post.ui.page.settings.custom.components.HctColorPickerDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.BackNavigationIcon
+import com.huanchengfly.tieba.post.ui.widgets.compose.GlassMaterial
+import com.huanchengfly.tieba.post.ui.widgets.compose.GlassPrefs
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
+import com.huanchengfly.tieba.post.ui.widgets.compose.spec
+import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.Slider
 import com.huanchengfly.tieba.post.ui.widgets.compose.TitleCentredToolbar
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberDialogState
 import com.huanchengfly.tieba.post.utils.appPreferences
@@ -413,6 +423,14 @@ fun CustomSettingsPage(
                 }
             }
 
+            // ── 玻璃材质（悬浮底栏与悬浮按钮）
+            item {
+                SectionLabel(text = stringResource(id = R.string.title_glass_material))
+            }
+            item {
+                GlassMaterialCard()
+            }
+
             // ── 字体
             item {
                 SectionLabel(text = stringResource(id = R.string.title_custom_font_size))
@@ -721,5 +739,253 @@ private fun VariantCard(
             modifier = Modifier.padding(horizontal = 8.dp)
         )
         Spacer(modifier = Modifier.size(8.dp))
+    }
+}
+
+/**
+ * 「玻璃材质」设置卡（与酷安 miuix17 同模型）：
+ * 三预设（毛玻璃/磨砂/液态）+ 七滑杆（透明度/折射强度/折射范围/模糊/饱和度/色散/高光）。
+ * 点预设 = 把预设数值整表写入滑杆并退出自定义态；拖任一滑杆 = 进入自定义态；
+ * 「恢复预设值」= 把当前预设的数值重新写入。全部经 DataStore 即时生效于 Dock 与悬浮按钮。
+ */
+@Composable
+private fun GlassMaterialCard() {
+    val context = LocalContext.current
+    val dataStore = context.dataStore
+    val scope = rememberCoroutineScope()
+    val hapticFeedback = LocalHapticFeedback.current
+    val settings = rememberGlassSettings()
+    val eff = settings.spec
+
+    var materialKey by rememberPreferenceAsMutableState(
+        key = stringPreferencesKey(GlassPrefs.KEY_MATERIAL),
+        defaultValue = GlassMaterial.Frosted.key,
+    )
+    var customActive by rememberPreferenceAsMutableState(
+        key = booleanPreferencesKey(GlassPrefs.KEY_CUSTOM_ACTIVE),
+        defaultValue = false,
+    )
+    var tintDark by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_TINT_DARK),
+        defaultValue = eff.tintAlphaDark,
+    )
+    var tintLight by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_TINT_LIGHT),
+        defaultValue = eff.tintAlphaLight,
+    )
+    var blur by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_BLUR),
+        defaultValue = eff.blurRadius.value,
+    )
+    var saturation by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_SATURATION),
+        defaultValue = eff.saturation,
+    )
+    var refractionHeight by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_REFRACTION_HEIGHT),
+        defaultValue = eff.refractionHeight.value,
+    )
+    var refractionAmount by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_REFRACTION_AMOUNT),
+        defaultValue = eff.refractionAmount.value,
+    )
+    var dispersion by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_DISPERSION),
+        defaultValue = eff.dispersion,
+    )
+    var highlight by rememberPreferenceAsMutableState(
+        key = floatPreferencesKey(GlassPrefs.KEY_HIGHLIGHT),
+        defaultValue = eff.highlightScale,
+    )
+
+    fun selectPreset(material: GlassMaterial) {
+        val s = material.spec()
+        materialKey = material.key
+        customActive = false
+        scope.launch {
+            dataStore.edit { prefs ->
+                prefs[floatPreferencesKey(GlassPrefs.KEY_TINT_DARK)] = s.tintAlphaDark
+                prefs[floatPreferencesKey(GlassPrefs.KEY_TINT_LIGHT)] = s.tintAlphaLight
+                prefs[floatPreferencesKey(GlassPrefs.KEY_BLUR)] = s.blurRadius.value
+                prefs[floatPreferencesKey(GlassPrefs.KEY_SATURATION)] = s.saturation
+                prefs[floatPreferencesKey(GlassPrefs.KEY_REFRACTION_HEIGHT)] =
+                    s.refractionHeight.value
+                prefs[floatPreferencesKey(GlassPrefs.KEY_REFRACTION_AMOUNT)] =
+                    s.refractionAmount.value
+                prefs[floatPreferencesKey(GlassPrefs.KEY_DISPERSION)] = s.dispersion
+                prefs[floatPreferencesKey(GlassPrefs.KEY_HIGHLIGHT)] = s.highlightScale
+            }
+        }
+    }
+
+    fun markCustom() {
+        if (!customActive) customActive = true
+    }
+
+    AppearanceCard {
+        // 预设三选一
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)
+        ) {
+            GlassMaterial.entries.forEach { material ->
+                val selected = !settings.customActive && settings.material == material
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (selected) {
+                                ExtendedTheme.colors.primary.copy(alpha = 0.16f)
+                            } else {
+                                ExtendedTheme.colors.chip
+                            }
+                        )
+                        .clickable {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            selectPreset(material)
+                        }
+                        .padding(vertical = 10.dp)
+                ) {
+                    Text(
+                        text = stringResource(
+                            id = when (material) {
+                                GlassMaterial.Clear -> R.string.title_glass_material_clear
+                                GlassMaterial.Frosted -> R.string.title_glass_material_frosted
+                                GlassMaterial.Liquid -> R.string.title_glass_material_liquid
+                            }
+                        ),
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) {
+                            ExtendedTheme.colors.primary
+                        } else {
+                            ExtendedTheme.colors.text
+                        },
+                    )
+                }
+            }
+        }
+        if (settings.customActive) {
+            Text(
+                text = stringResource(id = R.string.summary_glass_material_custom),
+                fontSize = 12.sp,
+                color = ExtendedTheme.colors.textSecondary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp)
+            )
+        }
+
+        // 滑杆组（Miuix Slider）：值即自定义分量，拖动即时全局生效
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_tint),
+            valueText = "%.2f".format(tintDark),
+            value = tintDark,
+            valueRange = 0f..0.8f,
+            onValueChange = { value ->
+                // 透明度以深色纱为准，浅色纱按当前深/浅比同比例缩放（miuix17 口径）
+                val ratio = if (eff.tintAlphaDark > 0f) {
+                    eff.tintAlphaLight / eff.tintAlphaDark
+                } else 1f
+                tintDark = value
+                tintLight = (value * ratio).coerceIn(0f, 0.8f)
+                markCustom()
+            },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_refraction_amount),
+            valueText = "${refractionAmount.toInt()} dp",
+            value = refractionAmount,
+            valueRange = 0f..48f,
+            onValueChange = { refractionAmount = it; markCustom() },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_refraction_height),
+            valueText = "${refractionHeight.toInt()} dp",
+            value = refractionHeight,
+            valueRange = 0f..40f,
+            onValueChange = { refractionHeight = it; markCustom() },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_blur),
+            valueText = "${blur.toInt()}",
+            value = blur,
+            valueRange = 0f..30f,
+            onValueChange = { blur = it; markCustom() },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_saturation),
+            valueText = "%.2f".format(saturation),
+            value = saturation,
+            valueRange = 1.0f..2.2f,
+            onValueChange = { saturation = it; markCustom() },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_dispersion),
+            valueText = "%.2f".format(dispersion),
+            value = dispersion,
+            valueRange = 0f..0.5f,
+            onValueChange = { dispersion = it; markCustom() },
+        )
+        GlassSliderRow(
+            title = stringResource(id = R.string.title_glass_highlight),
+            valueText = "${(highlight * 100).toInt()}%",
+            value = highlight,
+            valueRange = 0f..2f,
+            onValueChange = { highlight = it; markCustom() },
+        )
+
+        CardDivider()
+        SettingRow(
+            icon = Icons.Rounded.RestartAlt,
+            title = stringResource(id = R.string.title_glass_restore_preset),
+            summary = stringResource(
+                id = when (settings.material) {
+                    GlassMaterial.Clear -> R.string.title_glass_material_clear
+                    GlassMaterial.Frosted -> R.string.title_glass_material_frosted
+                    GlassMaterial.Liquid -> R.string.title_glass_material_liquid
+                }
+            ),
+            onClick = { selectPreset(settings.material) },
+        )
+    }
+}
+
+@Composable
+private fun GlassSliderRow(
+    title: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.subtitle1,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.body2,
+                color = ExtendedTheme.colors.textSecondary,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

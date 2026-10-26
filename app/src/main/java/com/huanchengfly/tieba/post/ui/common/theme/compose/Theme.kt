@@ -30,6 +30,10 @@ import com.huanchengfly.tieba.post.utils.parseColorHexOrNull
 import com.huanchengfly.tieba.post.utils.compose.darken
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
+import top.yukonga.miuix.kmp.theme.Colors
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.darkColorScheme
+import top.yukonga.miuix.kmp.theme.lightColorScheme
 
 @Stable
 data class ExtendedColors(
@@ -511,6 +515,39 @@ private fun getSeedColor(
     )
 }
 
+/**
+ * 把应用现有配色（[ExtendedColors]，由 MaterialKolor 种子色/动态取色/旧主题产出）
+ * 映射进 Miuix 的 [Colors]：只覆盖与应用语义对齐的关键角色，其余（错误色、禁用态、
+ * 滑杆、开关等 Miuix 组件内部色）保留 Miuix 工厂默认，与 Miuix 亮/暗基线一致。
+ * 种子色与动态取色设置因此对 Miuix 组件（顶栏等）同样生效。
+ */
+fun ExtendedColors.toMiuixColors(): Colors {
+    val base = if (isNightMode) darkColorScheme() else lightColorScheme()
+    return base.copy(
+        primary = primary,
+        onPrimary = onPrimary,
+        primaryVariant = accent,
+        onPrimaryVariant = onAccent,
+        secondary = accent,
+        onSecondary = onAccent,
+        background = background,
+        onBackground = text,
+        surface = card,
+        onSurface = text,
+        surfaceVariant = floorCard,
+        onSurfaceSecondary = textSecondary,
+        onSurfaceVariantSummary = textSecondary,
+        surfaceContainer = floorCard,
+        onSurfaceContainer = text,
+        surfaceContainerHigh = chip,
+        onSurfaceContainerHigh = text,
+        surfaceContainerHighest = chip,
+        onSurfaceContainerHighest = text,
+        outline = divider,
+        dividerLine = divider,
+    )
+}
+
 @Composable
 fun TiebaLiteTheme(
     content: @Composable () -> Unit
@@ -559,13 +596,18 @@ fun TiebaLiteTheme(
 
     val colors = getColorPalette(isDarkColorPalette, extendedColors)
 
+    val miuixColors = remember(extendedColors) { extendedColors.toMiuixColors() }
     CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
-        MaterialTheme(
-            colors = colors,
-            typography = Typography,
-            shapes = Shapes,
-            content = content
-        )
+        // Miuix 主题层包在 Material 外层：现有页面继续走 MaterialTheme 不受影响，
+        // Miuix 组件（主标签顶栏等）从 LocalColors 读取由现有配色映射出的 Miuix 色板。
+        MiuixTheme(colors = miuixColors) {
+            MaterialTheme(
+                colors = colors,
+                typography = Typography,
+                shapes = Shapes,
+                content = content
+            )
+        }
     }
 }
 
