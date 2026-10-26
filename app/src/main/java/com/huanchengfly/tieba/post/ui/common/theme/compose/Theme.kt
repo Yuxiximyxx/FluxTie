@@ -30,7 +30,7 @@ import com.huanchengfly.tieba.post.utils.parseColorHexOrNull
 import com.huanchengfly.tieba.post.utils.compose.darken
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
-import top.yukonga.miuix.kmp.theme.Colors
+import top.yukonga.miuix.kmp.theme.Colors as MiuixColors
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme
 import top.yukonga.miuix.kmp.theme.lightColorScheme
@@ -517,11 +517,11 @@ private fun getSeedColor(
 
 /**
  * 把应用现有配色（[ExtendedColors]，由 MaterialKolor 种子色/动态取色/旧主题产出）
- * 映射进 Miuix 的 [Colors]：只覆盖与应用语义对齐的关键角色，其余（错误色、禁用态、
+ * 映射进 Miuix 的 [MiuixColors]：只覆盖与应用语义对齐的关键角色，其余（错误色、禁用态、
  * 滑杆、开关等 Miuix 组件内部色）保留 Miuix 工厂默认，与 Miuix 亮/暗基线一致。
  * 种子色与动态取色设置因此对 Miuix 组件（顶栏等）同样生效。
  */
-fun ExtendedColors.toMiuixColors(): Colors {
+fun ExtendedColors.toMiuixColors(): MiuixColors {
     val base = if (isNightMode) darkColorScheme() else lightColorScheme()
     return base.copy(
         primary = primary,
