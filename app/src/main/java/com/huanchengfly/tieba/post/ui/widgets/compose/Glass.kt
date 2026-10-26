@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.LocalContentColor
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Snackbar
+import androidx.compose.material.SnackbarData
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -18,7 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -27,6 +34,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.huanchengfly.tieba.post.rememberPreferenceAsState
+import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -221,6 +229,30 @@ fun supportsGlassSampling(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CO
 @Composable
 fun rememberGlassBackdrop(): LayerBackdrop = rememberLayerBackdrop()
 
+/**
+ * 页面级玻璃采样源的传递管道（fork.4 起）：
+ * 由「页面内容根自录」的页面在内容根之上 provide（录制节点与页面同寿、不随消费者挂卸，
+ * 这是泥坛 1.7.3 菜单闪退换来的硬约束）；共享悬浮组件（菜单、Snackbar 等）在消费侧读取。
+ * 渲染上消费者（Popup 宿主 / Scaffold 的 snackbar 槽）都不在被录制子树的绘制层内，不会自采样。
+ * 无录制根的页面不 provide（默认 null），消费侧保持原材质不变，不拿半透色冒充玻璃。
+ */
+val LocalGlassBackdrop = compositionLocalOf<LayerBackdrop?> { null }
+
+/**
+ * 变体缩放（苹果规范：透镜强度随面积减弱）：菜单等中面用 0.6、sheet/对话框等大面用 0.35、
+ * 小面（Dock/FAB/Snackbar）用 1.0。只缩放折射带高与位移量；大面带高封顶 14dp，
+ * 避免宽带折射在大面上显出等值线。其余分量（纱/模糊/饱和/色散/高光）与预设/滑杆原值一致。
+ */
+fun GlassSpec.withLensScale(scale: Float): GlassSpec {
+    if (scale == 1f) return this
+    var height = refractionHeight * scale
+    if (scale < 0.5f && height > 14.dp) height = 14.dp
+    return copy(
+        refractionHeight = height,
+        refractionAmount = refractionAmount * scale,
+    )
+}
+
 /** 把当前内容录制为玻璃采样源（挂在内容根容器上；玻璃面本身不要挂，避免自采样）。 */
 fun Modifier.glassBackdropSource(backdrop: LayerBackdrop): Modifier =
     this.layerBackdrop(backdrop)
@@ -239,6 +271,7 @@ fun Modifier.glassSurface(
     shape: Shape,
     backdropShape: () -> Shape = { Capsule() },
     drawTint: Boolean = true,
+    tintShape: Shape? = null,
 ): Modifier {
     val tint = glassTintColor(isNightMode, spec)
     if (backdrop == null) {
@@ -272,11 +305,35 @@ fun Modifier.glassSurface(
         shadow = { null },
         onDrawSurface = if (drawTint) {
             {
-                // 叠纱：胶囊/圆的圆角 = 最小边一半，按形状内切绘制避免溢出方角
-                drawRoundRect(
-                    color = tint,
-                    cornerRadius = CornerRadius(size.minDimension / 2f, size.minDimension / 2f),
-                )
+                if (tintShape != null) {
+                    // 非胶囊面（菜单/Snackbar 等）：按面的真实形状轮廓铺纱，
+                    // 否则胶囊式内切圆角会让大面的四角漏纱、色块不均。
+                    // 本作用域无 drawOutline 成员，按 Outline 类型落到 rect/roundRect/path 三个成员绘制
+                    when (val outline = tintShape.createOutline(size, layoutDirection, this)) {
+                        is Outline.Rectangle ->
+                            drawRect(color = tint, topLeft = outline.rect.topLeft, size = outline.rect.size)
+
+                        is Outline.Rounded -> {
+                            // RoundRect 在本几何 API 下无 topLeft/size 便捷属性，按四边手算
+                            val rr = outline.roundRect
+                            drawRoundRect(
+                                color = tint,
+                                topLeft = Offset(rr.left, rr.top),
+                                size = Size(rr.right - rr.left, rr.bottom - rr.top),
+                                cornerRadius = rr.topLeftCornerRadius,
+                            )
+                        }
+
+                        is Outline.Generic ->
+                            drawPath(path = outline.path, color = tint)
+                    }
+                } else {
+                    // 叠纱：胶囊/圆的圆角 = 最小边一半，按形状内切绘制避免溢出方角
+                    drawRoundRect(
+                        color = tint,
+                        cornerRadius = CornerRadius(size.minDimension / 2f, size.minDimension / 2f),
+                    )
+                }
             }
         } else {
             null
@@ -332,5 +389,44 @@ fun GlassFloatingActionButton(
         CompositionLocalProvider(LocalContentColor provides fallbackContentColor) {
             content()
         }
+    }
+}
+
+/**
+ * 玻璃 Snackbar（小面，全量透镜）：页面经 [LocalGlassBackdrop] 提供采样源时，
+ * 在 Material [Snackbar] 背后垫一层同形状玻璃（Snackbar 本体改透明底、去自身 elevation，
+ * 布局/动作/无障碍语义仍走 Material 原实现）；无采样源时原样渲染 Material Snackbar。
+ * 阴影由外层 Box 的 shadow 承担（与 Snackbar 原 6dp elevation 对齐）。
+ */
+@Composable
+fun GlassSnackbar(
+    snackbarData: SnackbarData,
+    modifier: Modifier = Modifier,
+) {
+    val backdrop = LocalGlassBackdrop.current
+    if (backdrop == null || !supportsGlassSampling()) {
+        Snackbar(snackbarData = snackbarData, modifier = modifier)
+        return
+    }
+    val glassSettings = rememberGlassSettings()
+    val shape = MaterialTheme.shapes.small
+    Box(
+        modifier = modifier
+            .shadow(elevation = 6.dp, shape = shape, clip = false)
+            .glassSurface(
+                backdrop = backdrop,
+                spec = glassSettings.spec,
+                isNightMode = ExtendedTheme.colors.isNightMode,
+                shape = shape,
+                backdropShape = { shape },
+                tintShape = shape,
+            )
+    ) {
+        Snackbar(
+            snackbarData = snackbarData,
+            backgroundColor = Color.Transparent,
+            elevation = 0.dp,
+            shape = shape,
+        )
     }
 }

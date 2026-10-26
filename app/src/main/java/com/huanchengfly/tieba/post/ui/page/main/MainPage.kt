@@ -66,6 +66,7 @@ import com.huanchengfly.tieba.post.ui.utils.DevicePosture
 import com.huanchengfly.tieba.post.ui.utils.MainNavigationContentPosition
 import com.huanchengfly.tieba.post.ui.utils.MainNavigationType
 import com.huanchengfly.tieba.post.ui.widgets.compose.FloatingDock
+import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
@@ -318,7 +319,12 @@ fun MainPage(
             CompositionLocalProvider(
                 LocalMainBottomInsets provides if (floatingLayout) {
                     MainBottomBreathing + navigationBarsInset
-                } else 0.dp
+                } else 0.dp,
+                // fork.4：把主页已录制的内容采样源开放给页内悬浮组件（菜单/Snackbar 真玻璃）；
+                // 仅在录制节点确实挂载（悬浮布局 + 采样受支持）时提供，否则 null 保持原材质
+                LocalGlassBackdrop provides if (floatingLayout && backdropBlurSupported) {
+                    glassBackdrop
+                } else null
             ) {
                 MyScaffold(
                     backgroundColor = Color.Transparent,

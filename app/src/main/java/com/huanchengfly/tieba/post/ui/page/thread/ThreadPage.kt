@@ -70,6 +70,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.rememberModalBottomSheetState
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -160,8 +161,12 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.ListMenuItem
 import com.huanchengfly.tieba.post.ui.widgets.compose.LoadMoreLayout
 import com.huanchengfly.tieba.post.ui.widgets.compose.LongClickMenu
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyBackHandler
+import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyLazyColumn
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
+import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
+import com.huanchengfly.tieba.post.ui.widgets.compose.supportsGlassSampling
 import com.huanchengfly.tieba.post.ui.widgets.compose.OriginThreadCard
 import com.huanchengfly.tieba.post.ui.widgets.compose.PromptDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.Sizes
@@ -553,6 +558,8 @@ fun ThreadPage(
         viewModel.initialized = true
     }
     val scaffoldState = rememberScaffoldState()
+    // fork.4：帖子页玻璃采样源——录制帖子列表内容根（与页面同寿），供页内长按菜单/Snackbar 采样
+    val glassBackdrop = rememberGlassBackdrop()
     val data by viewModel.uiState.collectPartialAsState(
         prop1 = ThreadUiState::data,
         initial = persistentListOf()
@@ -1330,6 +1337,9 @@ fun ThreadPage(
                 )
             }
         ) {
+            CompositionLocalProvider(
+                LocalGlassBackdrop provides if (supportsGlassSampling()) glassBackdrop else null,
+            ) {
             MyScaffold(
                 scaffoldState = scaffoldState,
                 topBar = {
@@ -1515,6 +1525,7 @@ fun ThreadPage(
                     Box(
                         modifier = Modifier
                             .pullRefresh(state = pullRefreshState, enabled = enablePullRefresh)
+                            .glassBackdropSource(glassBackdrop)
                     ) {
                         LoadMoreLayout(
                             isLoading = isLoadingMore,
@@ -1906,6 +1917,7 @@ fun ThreadPage(
                         )
                     }
                 }
+            }
             }
         }
     }

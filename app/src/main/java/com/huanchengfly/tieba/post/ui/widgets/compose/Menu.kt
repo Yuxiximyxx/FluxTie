@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,30 @@ class MenuScope(
         onDismiss?.invoke()
         menuState.expanded = false
     }
+}
+
+/**
+ * 菜单容器材质（fork.4）：页面经 [LocalGlassBackdrop] 提供采样源时用中档透镜（×0.6）真玻璃，
+ * 否则回落 [fallback] 原纯色背景（不拿半透色冒充）。
+ * DropdownMenu 的 Popup 宿主渲染在窗口根层、不在被录制子树的绘制层内，不会自采样；
+ * 玻璃形状与菜单 Surface 的 shapes.medium 对齐。条目与语义不经此函数、零改动。
+ */
+@Composable
+private fun Modifier.menuContainerMaterial(fallback: Color): Modifier {
+    val backdrop = LocalGlassBackdrop.current
+    if (backdrop == null || !supportsGlassSampling()) {
+        return this.background(color = fallback)
+    }
+    val glassSettings = rememberGlassSettings()
+    val shape = MaterialTheme.shapes.medium
+    return this.glassSurface(
+        backdrop = backdrop,
+        spec = glassSettings.spec.withLensScale(0.6f),
+        isNightMode = ExtendedTheme.colors.isNightMode,
+        shape = shape,
+        backdropShape = { shape },
+        tintShape = shape,
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -102,7 +127,7 @@ fun ClickMenu(
             DropdownMenu(
                 expanded = menuState.expanded,
                 onDismissRequest = { menuScope.dismiss() },
-                modifier = modifier.background(color = MaterialTheme.colors.surface)
+                modifier = modifier.menuContainerMaterial(MaterialTheme.colors.surface)
             ) {
                 ProvideContentColor(color = ExtendedTheme.colors.text) {
                     menuScope.menuContent()
@@ -167,7 +192,7 @@ fun LongClickMenu(
             DropdownMenu(
                 expanded = menuState.expanded,
                 onDismissRequest = { menuState.expanded = false },
-                modifier = Modifier.background(color = ExtendedTheme.colors.menuBackground)
+                modifier = Modifier.menuContainerMaterial(ExtendedTheme.colors.menuBackground)
             ) {
                 ProvideContentColor(color = ExtendedTheme.colors.text) {
                     menuContent()

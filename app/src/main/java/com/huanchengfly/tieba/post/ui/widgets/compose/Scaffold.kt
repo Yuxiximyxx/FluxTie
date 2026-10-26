@@ -43,7 +43,10 @@ private fun SwipeToDismissSnackbarHost(hostState: SnackbarHostState) {
         }
     }
     SwipeToDismiss(state = dismissState, background = {}) {
-        SnackbarHost(hostState = hostState)
+        SnackbarHost(hostState = hostState) { snackbarData ->
+            // 页面提供玻璃采样源（LocalGlassBackdrop）时为真玻璃，否则原 Material 外观
+            GlassSnackbar(snackbarData = snackbarData)
+        }
     }
 }
 

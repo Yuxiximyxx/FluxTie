@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -111,6 +112,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.GlassFloatingActionButton
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
+import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.supportsGlassSampling
 import com.huanchengfly.tieba.post.ui.widgets.compose.AvatarPlaceholder
 import com.huanchengfly.tieba.post.ui.widgets.compose.BackNavigationIcon
@@ -603,6 +605,9 @@ fun ForumPage(
                 LoadingPlaceholder(forumName)
             }
         ) {
+            CompositionLocalProvider(
+                LocalGlassBackdrop provides if (supportsGlassSampling()) glassBackdrop else null,
+            ) {
             MyScaffold(
                 scaffoldState = scaffoldState,
                 backgroundColor = Color.Transparent,
@@ -1057,6 +1062,7 @@ fun ForumPage(
                         }
                     }
                 }
+            }
             }
         }
     }
