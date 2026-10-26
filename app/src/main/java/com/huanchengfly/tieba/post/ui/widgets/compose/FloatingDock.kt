@@ -71,6 +71,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,9 +92,14 @@ import kotlin.math.sign
 /** 外壳高度：68dp 全胶囊（跨应用统一悬浮 Dock 规格）。 */
 private val DockShellHeight = 68.dp
 
-/** 外壳宽度占屏比（统一规格约 58% 居中）与平板防拉伸上限。 */
-private const val DockWidthFraction = 0.58f
-private val DockMaxWidth = 400.dp
+/** 单槽目标宽：壳宽按 Tab 数量自适应（总宽 = 槽宽 × 数量 + 两侧内距）。 */
+private val DockSlotWidth = 72.dp
+
+/** 壳宽绝对上限（大屏/平板防拉伸）。 */
+private val DockAbsoluteMaxWidth = 480.dp
+
+/** 壳宽相对屏幕的封顶留白：总宽不超过屏宽减此值。 */
+private val DockScreenEdgeAllowance = 32.dp
 
 /** 外壳距系统导航栏的底边距。 */
 private val DockBottomMargin = 12.dp
@@ -158,11 +164,25 @@ private const val DockVelocityClamp = 0.2f
 /** 拖拽到边界后整个面板的 rubber-band 跟手位移上限。 */
 private val DockRubberBand = 4.dp
 
+/**
+ * 悬浮 Dock 壳宽（按按钮数量自适应，替代旧「屏宽 × 58%」固定规格——
+ * 4 个 Tab 挤在 58% 里单槽仅约 53dp，过于拥挤）：
+ * 期望宽 = [DockSlotWidth] × 数量 + 两侧内距，再以「屏宽 − [DockScreenEdgeAllowance]」
+ * 与 [DockAbsoluteMaxWidth] 双重封顶；窄屏触顶时单槽随总宽等比收窄。
+ * 例（393dp 屏）：4 Tab = 72×4+16 = 304dp；3 Tab = 72×3+16 = 232dp。
+ */
+internal fun dockShellWidth(maxWidth: Dp, itemCount: Int): Dp {
+    val count = itemCount.coerceAtLeast(1)
+    val desired = DockSlotWidth * count + DockInnerHorizontalPadding * 2
+    val screenCap = (maxWidth - DockScreenEdgeAllowance).coerceAtLeast(0.dp)
+    return desired.coerceAtMost(minOf(screenCap, DockAbsoluteMaxWidth))
+}
+
 /** 背景模糊（RenderEffect / haze）需要 API 31+。 */
 fun supportsBackdropBlur(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /**
- * 悬浮 Dock（跨应用统一规格：宽约 58% 居中、68dp 全胶囊）：
+ * 悬浮 Dock（跨应用统一规格：宽按按钮数量自适应居中、68dp 全胶囊）：
  * Kyant 液态玻璃壳（背景采样 + 饱和/模糊/折射，参数由「玻璃材质」设置驱动）+
  * 弹性胶囊指示器（spring 位移 + 按下 bloom + 速度形变 + 拖拽跟手）；
  * 选中项为深色椭圆高亮，内竖排「图标在上 + 文字在下」用强调色，未选中只露图标。
@@ -248,8 +268,8 @@ fun FloatingDock(
                 .fillMaxWidth()
                 .height(DockShellHeight)
         ) {
-            // 统一规格：壳宽 = 屏宽 × 58%（平板封顶 DockMaxWidth），水平居中
-            val shellWidth = (maxWidth * DockWidthFraction).coerceAtMost(DockMaxWidth)
+            // 统一规格：壳宽按 Tab 数量自适应（dockShellWidth），水平居中
+            val shellWidth = dockShellWidth(maxWidth = maxWidth, itemCount = itemCount)
             val slotWidth = (shellWidth - DockInnerHorizontalPadding * 2) / itemCount
             val density = LocalDensity.current
             val slotWidthPx = with(density) { slotWidth.toPx() }
@@ -276,14 +296,15 @@ fun FloatingDock(
                 if (blurSupported) tint
                 else tint.copy(alpha = (tint.alpha + 0.38f).coerceAtMost(0.92f))
             }
-            val shadowAlpha = if (isNight) 0.22f else 0.13f
+            // 投影压暗提亮一档（fork.3 真机反馈玻璃偏暗）：浅色 0.13→0.10，夜间不变
+            val shadowAlpha = if (isNight) 0.22f else 0.10f
             // 双峰轮廓光：顶部高光弧（白）；底部次级弧——浅色下用暗边勾勒边界（白线在近白背景上不可见），
             // 夜间/AMOLED 用次级白色反光
             val rimTopAlpha = if (isNight) 0.22f else 0.90f
             val rimBottomColor = if (isNight) Color.White else Color.Black
-            val rimBottomAlpha = if (isNight) 0.10f else 0.14f
-            // 外圈微光晕：浅色贴边暗晕勾勒边界，夜间贴边发光
-            val haloColor = if (isNight) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.06f)
+            val rimBottomAlpha = 0.10f
+            // 外圈微光晕：浅色贴边暗晕勾勒边界，夜间贴边发光（浅色基值 0.06→0.045 减压暗）
+            val haloColor = if (isNight) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.045f)
             // 4 色标双峰渐变（中段两端全透明，避免非预乘插值出脏灰）
             val rimBrush = Brush.verticalGradient(
                 0f to Color.White.copy(alpha = rimTopAlpha),
@@ -556,9 +577,9 @@ private fun DockIndicator(
     val rimTopAlpha = ((if (isNightMode) 0.25f else 0.80f) + 0.10f * bloomProgress)
         .coerceAtMost(1f)
     val rimBottomColor = if (isNightMode) Color.White else Color.Black
-    val rimBottomAlpha = if (isNightMode) 0.10f else 0.12f
-    // 外圈微光晕：浅色贴边暗晕勾勒边界，夜间贴边发光（壳同款）
-    val haloColor = if (isNightMode) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.06f)
+    val rimBottomAlpha = 0.10f
+    // 外圈微光晕：浅色贴边暗晕勾勒边界，夜间贴边发光（壳同款；浅色基值 0.06→0.045 减压暗）
+    val haloColor = if (isNightMode) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.045f)
     val rimBrush = Brush.verticalGradient(
         0f to Color.White.copy(alpha = rimTopAlpha),
         0.35f to Color.White.copy(alpha = 0f),
@@ -616,12 +637,14 @@ private fun DockIndicator(
             )
             .drawBehind {
                 val cornerRadius = CornerRadius(size.height / 2f)
-                // 统一规格：选中 = 深色椭圆高亮（浅色近黑实色、夜间黑半透），其上承载强调色图标+文字；
+                // 统一规格：选中 = 深色椭圆高亮，其上承载强调色图标+文字；
+                // fork.3 提亮一档（真机反馈偏暗）：浅色由近黑实色 #1B1C1F α0.92 改更透的深灰
+                // #3C3D42 α0.80，夜间由纯黑 α0.55 改深灰 #26262B α0.60，避免整块压成黑饼；
                 // 按压时略微变透，让透镜折射透出来，避免完全压死玻璃感
                 val darkFill = if (isNightMode) {
-                    Color.Black.copy(alpha = 0.55f * (1f - 0.15f * bloomProgress))
+                    Color(0xFF26262B).copy(alpha = 0.60f * (1f - 0.15f * bloomProgress))
                 } else {
-                    Color(0xFF1B1C1F).copy(alpha = 0.92f * (1f - 0.15f * bloomProgress))
+                    Color(0xFF3C3D42).copy(alpha = 0.80f * (1f - 0.15f * bloomProgress))
                 }
                 drawRoundRect(color = darkFill, cornerRadius = cornerRadius)
                 drawRoundRect(

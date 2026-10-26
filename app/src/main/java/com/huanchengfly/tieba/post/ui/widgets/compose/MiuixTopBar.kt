@@ -1,11 +1,16 @@
 package com.huanchengfly.tieba.post.ui.widgets.compose
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 
@@ -36,8 +41,22 @@ fun MiuixMainTopBar(
             color = topBarColor,
             titleColor = onTopBarColor,
             navigationIcon = {
-                ProvideContentColor(color = onTopBarColor) {
-                    navigationIcon?.invoke()
+                navigationIcon?.let { icon ->
+                    // Miuix 的 navigationIcon 槽把内容顶齐左上角放置（起始边距 0、
+                    // 不与标题行垂直居中），旧 Material TopAppBar 时代靠内容自带 Spacer
+                    // 撑边距的账号头像在这里会贴边上飘（fork.2 真机截图实证）。
+                    // 套一层占满槽高、居中靠左的容器把内容收进顶栏行内，起始边距统一 16dp；
+                    // 内容自带的 Spacer 在 Box 内只是重叠的兄弟节点，不再生效，不会叠距。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(start = 16.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        ProvideContentColor(color = onTopBarColor) {
+                            icon()
+                        }
+                    }
                 }
             },
             actions = {
