@@ -642,12 +642,15 @@ private fun DockIndicator(
                 // fork.5 再提亮浅色（真机反馈 #3C3D42 α0.80 在浅色玻璃上仍读成近黑、图标文字发闷）：
                 // 浅色改中浅灰 #55565C α0.38——叠在近白玻璃上实际呈浅灰，强调色图标+文字可读，
                 // 同时更透让透镜折射透出来；夜间不动。按压时略微变透的逻辑保留。
-                val darkFill = if (isNightMode) {
-                    Color(0xFF26262B).copy(alpha = 0.60f * (1f - 0.15f * bloomProgress))
+                // fork.6：fork.3/fork.5 的灰色实色填充仍被真机判太暗，改泥坛（LumaGA）Dock
+                // 定版配方——不用灰色填充，只以低不透明度纯黑垫层叠在指示器自身的采样玻璃上：
+                // 浅色 Black α0.08、深色 Black α0.12，呈浅亮椭圆、透镜折射透出。
+                val padFill = if (isNightMode) {
+                    Color.Black.copy(alpha = 0.12f * (1f - 0.15f * bloomProgress))
                 } else {
-                    Color(0xFF55565C).copy(alpha = 0.38f * (1f - 0.15f * bloomProgress))
+                    Color.Black.copy(alpha = 0.08f * (1f - 0.15f * bloomProgress))
                 }
-                drawRoundRect(color = darkFill, cornerRadius = cornerRadius)
+                drawRoundRect(color = padFill, cornerRadius = cornerRadius)
                 drawRoundRect(
                     brush = rimGlowBrush,
                     cornerRadius = cornerRadius,

@@ -67,6 +67,7 @@ import com.huanchengfly.tieba.post.ui.utils.MainNavigationContentPosition
 import com.huanchengfly.tieba.post.ui.utils.MainNavigationType
 import com.huanchengfly.tieba.post.ui.widgets.compose.FloatingDock
 import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
+import com.huanchengfly.tieba.post.ui.widgets.compose.PublishGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
@@ -307,6 +308,9 @@ fun MainPage(
     // 导航栏区域需在此统一补足:呼吸位 = 胶囊高 + 底边距 + 呼吸(84dp) + 系统导航栏,
     // 列表末项才能完整滚出胶囊,加载提示胶囊也停在这条线上。
     val navigationBarsInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // fork.6：与下方 LocalGlassBackdrop provide 同条件登记到 GlassBackdropRegistry，
+    // 供组合树之外的应用级 sheet（ReplyPage 编辑卡）采样；经典布局未录制时登记 null
+    PublishGlassBackdrop(if (floatingLayout && backdropBlurSupported) glassBackdrop else null)
     ProvideNavigator(navigator = navigator) {
         NavigationWrapper(
             currentPosition = currentPosition,

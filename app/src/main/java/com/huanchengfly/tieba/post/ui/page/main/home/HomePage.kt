@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
@@ -95,7 +94,6 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.Chip
 import com.huanchengfly.tieba.post.ui.widgets.compose.ConfirmDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.ErrorScreen
 import com.huanchengfly.tieba.post.models.database.History
-import com.huanchengfly.tieba.post.ui.widgets.compose.HorizontalDivider
 import com.huanchengfly.tieba.post.ui.widgets.compose.LongClickMenu
 import com.huanchengfly.tieba.post.ui.widgets.compose.MenuState
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyLazyColumn
@@ -391,14 +389,13 @@ private fun HomeSectionCard(
     }
 }
 
+/**
+ * fork.6：最近逛过改横向小条目——圆形头像在上、吧名居中其下、相对时间（取 History.timestamp，
+ * 框架本地化格式，如「38 分钟前」）在最下，单列宽 64dp，由卡内 LazyRow 横向滑动承载；
+ * fork.5 的纵向大行（五行占高）退役。时间文案只保留相对时间、「逛过」后缀省略（卡标题已表意）。
+ */
 @Composable
-private fun HomeCardDivider() {
-    HorizontalDivider(modifier = Modifier.padding(start = 68.dp, end = 16.dp))
-}
-
-/** fork.5：最近逛过行——头像 + 吧名 + 「X 前逛过」（相对时间取 History.timestamp，框架本地化格式）。 */
-@Composable
-private fun HistoryForumRow(
+private fun HistoryForumChip(
     history: History,
     onClick: () -> Unit,
 ) {
@@ -409,35 +406,39 @@ private fun HistoryForumRow(
             DateUtils.MINUTE_IN_MILLIS
         ).toString()
     }
-    Row(
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(64.dp)
             .debounceClickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Avatar(
             data = history.avatar,
-            size = 40.dp,
+            size = 44.dp,
             shape = CircleShape,
             contentDescription = null
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = history.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = ExtendedTheme.colors.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "$relativeTime 逛过",
-                fontSize = 12.sp,
-                color = ExtendedTheme.colors.textSecondary
-            )
-        }
+        Text(
+            text = history.title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = ExtendedTheme.colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = relativeTime,
+            fontSize = 10.sp,
+            color = ExtendedTheme.colors.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -537,7 +538,7 @@ fun HomePage(
                     ) {
                         TiebaUtil.startSign(context)
                     }
-                    // fork.5：首页改三组分组卡固定版式（最近逛过/关注/一键签到），
+                    // fork.5：首页改分组卡固定版式（fork.6 起为最近逛过/关注两卡），
                     // 原「列表单列/双列切换」随网格版式一并退役（listSingle 偏好保留未删）。
                 }
             )
@@ -578,9 +579,11 @@ fun HomePage(
                         error?.let { ErrorScreen(error = it) }
                     }
                 ) {
-                    // fork.5（MIUIX 首页效果图 + 小乐细则）：首页只保留三块内容——
-                    // 最近逛过的吧 / 关注的吧 / 一键签到，三张分组大圆角卡；
-                    // 原网格版式（置顶/关注双列网格）退役，首页本就没有推荐信息流、无流可移。
+                    // fork.5（MIUIX 首页效果图 + 小乐细则）：首页只保留分组大圆角卡——
+                    // 最近逛过的吧 / 关注的吧 / 一键签到；原网格版式（置顶/关注双列网格）退役，
+                    // 首页本就没有推荐信息流、无流可移。
+                    // fork.6：一键签到卡与顶栏签到按钮重复、整卡删除，只剩两卡；
+                    // 最近逛过卡内改横向滑动小条目（见 HistoryForumChip）。
                     MyLazyColumn(
                         contentPadding = PaddingValues(bottom = 12.dp + LocalMainBottomInsets.current),
                         modifier = Modifier.fillMaxSize(),
@@ -590,17 +593,25 @@ fun HomePage(
                                 HomeSectionCard(
                                     title = stringResource(id = R.string.title_history_forum)
                                 ) {
-                                    historyForums.forEachIndexed { index, history ->
-                                        HistoryForumRow(
-                                            history = history,
-                                            onClick = {
-                                                navigator.navigate(
-                                                    ForumPageDestination(history.data)
-                                                )
-                                            }
-                                        )
-                                        if (index < historyForums.lastIndex) {
-                                            HomeCardDivider()
+                                    // fork.6：卡内改横向可滑动的一行小条目（头像+吧名+相对时间），
+                                    // 数据与排序沿用现有 History 逻辑，点击仍进吧页
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(horizontal = 12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        items(
+                                            items = historyForums,
+                                            key = { it.data }
+                                        ) { history ->
+                                            HistoryForumChip(
+                                                history = history,
+                                                onClick = {
+                                                    navigator.navigate(
+                                                        ForumPageDestination(history.data)
+                                                    )
+                                                }
+                                            )
                                         }
                                     }
                                 }
@@ -653,47 +664,8 @@ fun HomePage(
                                 }
                             }
                         }
-                        item(key = "SignCard") {
-                            val unsignedCount = remember(forums, topForums) {
-                                (topForums + forums).distinctBy { it.forumId }.count { !it.isSign }
-                            }
-                            HomeSectionCard(
-                                title = stringResource(id = R.string.title_oksign)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                                    verticalAlignment = CenterVertically
-                                ) {
-                                    Text(
-                                        text = if (unsignedCount > 0) {
-                                            "还有 $unsignedCount 个吧未签到"
-                                        } else {
-                                            "今日已全部签到"
-                                        },
-                                        style = MaterialTheme.typography.body2,
-                                        color = ExtendedTheme.colors.textSecondary,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Button(
-                                        onClick = { TiebaUtil.startSign(context) },
-                                        shape = RoundedCornerShape(100),
-                                        colors = ButtonDefaults.buttonColors(
-                                            backgroundColor = ExtendedTheme.colors.accent,
-                                            contentColor = ExtendedTheme.colors.onAccent
-                                        ),
-                                        elevation = null,
-                                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = stringResource(id = R.string.title_oksign),
-                                            fontSize = 14.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        // fork.6：原第三卡「一键签到」整卡删除——与顶栏右上角签到按钮
+                        // （MiuixMainTopBar 的 ActionItem，仍走 TiebaUtil.startSign）功能重复。
                     }
                 }
             }

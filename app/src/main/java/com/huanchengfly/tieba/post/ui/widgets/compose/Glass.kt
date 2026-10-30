@@ -14,9 +14,12 @@ import androidx.compose.material.Snackbar
 import androidx.compose.material.SnackbarData
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -237,6 +240,32 @@ fun rememberGlassBackdrop(): LayerBackdrop = rememberLayerBackdrop()
  * 无录制根的页面不 provide（默认 null），消费侧保持原材质不变，不拿半透色冒充玻璃。
  */
 val LocalGlassBackdrop = compositionLocalOf<LayerBackdrop?> { null }
+
+/**
+ * 当前页面采样源的发布登记（fork.6）：应用级底部 sheet 目的地（如发帖/回复编辑器 ReplyPage）
+ * 位于各页面组合树之外（MainActivityV2 的 ModalBottomSheetLayout sheet 槽），页面内 provide 的
+ * [LocalGlassBackdrop] 按组合规则传不到那里。页面在 provide 的同时经 [PublishGlassBackdrop]
+ * 把同一个 [LayerBackdrop] 实例登记到这里，sheet 侧读登记值走同一条 [glassSurface] 采样链；
+ * 无页面登记（null）时消费侧走 glassSurface 既有降级（提稠纯色），不伪造采样。
+ * 登记跟随页面生命周期：页面销毁且登记值仍是本页实例时自动注销；导航转场中新页先登记、
+ * 旧页后销毁，注销带实例守卫不会误清新页的登记。
+ */
+object GlassBackdropRegistry {
+    var active: LayerBackdrop? by mutableStateOf(null)
+}
+
+/** 把本页采样源同步登记到 [GlassBackdropRegistry]（与页面内 provide 的值保持一致）。 */
+@Composable
+fun PublishGlassBackdrop(backdrop: LayerBackdrop?) {
+    DisposableEffect(backdrop) {
+        GlassBackdropRegistry.active = backdrop
+        onDispose {
+            if (GlassBackdropRegistry.active == backdrop) {
+                GlassBackdropRegistry.active = null
+            }
+        }
+    }
+}
 
 /**
  * 变体缩放（苹果规范：透镜强度随面积减弱）：菜单等中面用 0.6、sheet/对话框等大面用 0.35、

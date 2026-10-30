@@ -72,6 +72,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -123,6 +125,10 @@ import com.huanchengfly.tieba.post.ui.page.reply.ReplyPanelType.IMAGE
 import com.huanchengfly.tieba.post.ui.page.reply.ReplyPanelType.NONE
 import com.huanchengfly.tieba.post.ui.utils.imeNestedScroll
 import com.huanchengfly.tieba.post.ui.widgets.compose.BaseDialog
+import com.huanchengfly.tieba.post.ui.widgets.compose.GlassBackdropRegistry
+import com.huanchengfly.tieba.post.ui.widgets.compose.glassSurface
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
+import com.huanchengfly.tieba.post.ui.widgets.compose.withLensScale
 import com.huanchengfly.tieba.post.ui.widgets.compose.BaseTextField
 import com.huanchengfly.tieba.post.ui.widgets.compose.Dialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.DialogNegativeButton
@@ -469,7 +475,12 @@ internal fun ReplyPageContent(
 
     val textFieldScrollState = rememberScrollState()
 
-    val parentModifier = if (curKeyboardType == NONE && !closingPanel) {
+    // fork.6：IME/导航栏让位按呈现路径分工——
+    // 对话框路径（isDialog，楼中楼 ReplyDialog）保持原逻辑：内容根自己吃
+    // navigationBarsPadding + 下方的 IME 底部 padding；
+    // sheet 路径（ReplyPage 浮动卡）的让位改由 ReplyPage 包装层在卡外统一承担（见该函数），
+    // 卡内再留 IME padding 只会变成卡底死空白、把卡撑高悬空（fork.5 真机问题的根因）。
+    val parentModifier = if (isDialog) {
         Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
@@ -477,7 +488,6 @@ internal fun ReplyPageContent(
     } else {
         Modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
             .consumeWindowInsets(WindowInsets.ime)
     }
 
@@ -497,7 +507,8 @@ internal fun ReplyPageContent(
                 }
             }
             .padding(bottom = with(density) {
-                imeAnimationTargetHeight.toDp()
+                // fork.6：sheet 路径为 0（让位在卡外，见 ReplyPage）；对话框路径保持原 IME 让位
+                if (isDialog) imeAnimationTargetHeight.toDp() else 0.dp
             }),
         verticalArrangement = Arrangement.Bottom
     ) {
@@ -835,6 +846,7 @@ internal fun ReplyPageContent(
 }
 
 // TODO: 将软键盘状态相关逻辑抽离出来
+@OptIn(ExperimentalLayoutApi::class)
 @Destination(style = DestinationStyleBottomSheet::class)
 @Composable
 fun ReplyPage(
@@ -852,30 +864,70 @@ fun ReplyPage(
 ) {
     // fork.5：发帖/回复编辑器改悬浮窗口——宿主 sheet 底板已透明（见 MainActivityV2），
     // 这里自带四周留边、四角全圆角的浮动卡片（scrim 压暗背景），不再贴底贴边；
-    // 编辑功能与提交链路（ReplyPageContent 本体）不动。卡内原有 navigationBarsPadding
-    // 与 IME 底部让位逻辑保留，卡片底边距与之叠加成悬浮间隙。
-    Box(
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+    // 编辑功能与提交链路（ReplyPageContent 本体）不动。
+    // fork.6【位置根因修复】：本应用 edge-to-edge（decorFitsSystemWindows=false），窗口不随
+    // 键盘缩放、sheet 锚在物理屏底。fork.5 把 ReplyPageContent 内部的 IME 底部 padding
+    // （=imeAnimationTarget 高度）原样留在卡内：padding 沦为卡底死空白、把卡撑高约一个
+    // 键盘高度，功能行被顶离键盘、卡身悬在输入法上方（小乐真机截图实证）。修法是把让位
+    // 移到卡外：本包装层底部间隙随 imeAnimationTarget 高度走——键盘弹起时卡底边紧贴键盘
+    // 上沿，收起时回到 12dp 悬浮留距；卡内 sheet 路径的 IME/导航栏 padding 已同步移除
+    // （见 ReplyPageContent 的 parentModifier 与底部 padding 分工）。
+    // fork.6【玻璃】：卡面改真玻璃——本目的地位于各页面组合树之外（应用级 sheet），页面
+    // provide 的 LocalGlassBackdrop 直达不到，采样源经 GlassBackdropRegistry 取当前页面
+    // 登记的同一 LayerBackdrop，走 glassSurface 既有 Kyant 采样链；大面档透镜 ×0.35 +
+    // 纱在当前材质规格上 +0.12 略增稠，压大面采样碎字与伪影。无登记采样源时走
+    // glassSurface 既有提稠纯色降级（同 API<31 口径），不伪造采样。阴影由本层 shadow
+    // 承担（glassSurface 库内阴影关闭，避免双影，与 fork.5 的 Surface 8dp elevation 对齐）。
+    val density = LocalDensity.current
+    val imeAnimationTargetInset = WindowInsets.imeAnimationTarget
+    val imeTargetBottomPx by produceState(
+        initialValue = 0,
+        imeAnimationTargetInset,
+        density
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = ExtendedTheme.colors.windowBackground,
-            elevation = 8.dp,
-        ) {
-            ReplyPageContent(
-                viewModel = viewModel,
-                onBack = { navigator.navigateUp() },
-                forumId = forumId,
-                forumName = forumName,
-                threadId = threadId,
-                postId = postId,
-                subPostId = subPostId,
-                replyUserId = replyUserId,
-                replyUserName = replyUserName,
-                replyUserPortrait = replyUserPortrait,
-                tbs = tbs
+        snapshotFlow { imeAnimationTargetInset.getBottom(density) }
+            .distinctUntilChanged()
+            .collect { value = it }
+    }
+    val cardBottomGap = maxOf(with(density) { imeTargetBottomPx.toDp() }, 12.dp)
+    val backdrop = GlassBackdropRegistry.active
+    val glassSettings = rememberGlassSettings()
+    val cardShape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            .padding(bottom = cardBottomGap)
+            .shadow(elevation = 8.dp, shape = cardShape, clip = false)
+            .glassSurface(
+                backdrop = backdrop,
+                spec = glassSettings.spec
+                    .copy(
+                        tintAlphaDark = (glassSettings.spec.tintAlphaDark + 0.12f)
+                            .coerceAtMost(0.9f),
+                        tintAlphaLight = (glassSettings.spec.tintAlphaLight + 0.12f)
+                            .coerceAtMost(0.9f)
+                    )
+                    .withLensScale(0.35f),
+                isNightMode = ExtendedTheme.colors.isNightMode,
+                shape = cardShape,
+                backdropShape = { cardShape },
+                tintShape = cardShape,
             )
-        }
+            .clip(cardShape)
+    ) {
+        ReplyPageContent(
+            viewModel = viewModel,
+            onBack = { navigator.navigateUp() },
+            forumId = forumId,
+            forumName = forumName,
+            threadId = threadId,
+            postId = postId,
+            subPostId = subPostId,
+            replyUserId = replyUserId,
+            replyUserName = replyUserName,
+            replyUserPortrait = replyUserPortrait,
+            tbs = tbs
+        )
     }
 }
 

@@ -110,6 +110,7 @@ import com.huanchengfly.tieba.post.ui.page.forum.threadlist.ForumThreadListPage
 import com.huanchengfly.tieba.post.ui.page.forum.threadlist.ForumThreadListUiEvent
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.GlassFloatingActionButton
+import com.huanchengfly.tieba.post.ui.widgets.compose.PublishGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
@@ -395,6 +396,8 @@ fun ForumPage(
     val context = LocalContext.current
     // 发帖 FAB 的液态玻璃：采样源录制帖子列表内容，参数由「玻璃材质」设置驱动
     val glassBackdrop = rememberGlassBackdrop()
+    // fork.6：同步登记到 GlassBackdropRegistry，供组合树之外的应用级 sheet（ReplyPage 编辑卡）采样
+    PublishGlassBackdrop(if (supportsGlassSampling()) glassBackdrop else null)
     val glassSettings = rememberGlassSettings()
     LazyLoad(loaded = viewModel.initialized) {
         viewModel.send(ForumUiIntent.Load(forumName, getSortType(context, forumName)))

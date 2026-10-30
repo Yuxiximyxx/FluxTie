@@ -168,6 +168,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.MyBackHandler
 import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyLazyColumn
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
+import com.huanchengfly.tieba.post.ui.widgets.compose.PublishGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassSurface
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
@@ -570,6 +571,8 @@ fun ThreadPage(
     val scaffoldState = rememberScaffoldState()
     // fork.4：帖子页玻璃采样源——录制帖子列表内容根（与页面同寿），供页内长按菜单/Snackbar 采样
     val glassBackdrop = rememberGlassBackdrop()
+    // fork.6：同步登记到 GlassBackdropRegistry，供组合树之外的应用级 sheet（ReplyPage 编辑卡）采样
+    PublishGlassBackdrop(if (supportsGlassSampling()) glassBackdrop else null)
     val data by viewModel.uiState.collectPartialAsState(
         prop1 = ThreadUiState::data,
         initial = persistentListOf()
@@ -1542,8 +1545,14 @@ fun ThreadPage(
                     Box(
                         modifier = Modifier
                             .pullRefresh(state = pullRefreshState, enabled = enablePullRefresh)
-                            .glassBackdropSource(glassBackdrop)
                     ) {
+                        // fork.6：录制节点收窄为只包列表区（LoadMoreLayout + 刷新指示器）——
+                        // 悬浮回复条改玻璃采样后必须位于被录制子树之外（自采样红线），
+                        // 它留在本外层 Box 内作录制 Box 的同级覆盖（见下方调用点），
+                        // 两者同原点同尺寸，采样坐标与纹理同系不越界。
+                        Box(
+                            modifier = Modifier.glassBackdropSource(glassBackdrop)
+                        ) {
                         LoadMoreLayout(
                             isLoading = isLoadingMore,
                             onLoadMore = {
@@ -1936,10 +1945,11 @@ fun ThreadPage(
                             backgroundColor = ExtendedTheme.colors.pullRefreshIndicator,
                             contentColor = ExtendedTheme.colors.onPrimary,
                         )
+                        }
 
-                        // fork.5：悬浮回复条——脱离底边、两侧留距的胶囊浮在内容上方
-                        // （与悬浮 Dock 同一语言：实色胶囊 + 阴影，不采样玻璃以免与 Dock
-                        // 采样面叠加）；页内菜单 sheet 打开时隐藏，避免与菜单重叠。
+                        // fork.6：悬浮回复条——脱离底边、两侧留距的胶囊浮在内容上方，
+                        // 本体改真玻璃采样（见 BottomBar）；此处是录制 Box 的同级覆盖层、
+                        // 不在被录制子树内。页内菜单 sheet 打开时隐藏，避免与菜单重叠。
                         if (bottomSheetState.targetValue == ModalBottomSheetValue.Hidden) {
                             BottomBar(
                                 user = user,
@@ -2117,14 +2127,44 @@ private fun BottomBar(
     agreeNum: Long = 0,
 ) {
     // fork.5：回复条改悬浮胶囊——调用方以 align + 两侧 16dp + 底部 12dp 的 modifier 把它
-    // 浮在内容上方，这里只负责胶囊本体（全圆角 + 阴影 + threadBottomBar 实色面，与悬浮
-    // Dock 同一语言；不做玻璃采样，避免与 Dock 采样面在同屏叠加）。原贴底通栏的导航栏
-    // 让位 Spacer 随通栏形态一并退役（让位改由调用方 navigationBarsPadding 承担）。
+    // 浮在内容上方；原贴底通栏的导航栏让位 Spacer 随通栏形态一并退役（让位改由调用方
+    // navigationBarsPadding 承担）。
+    // fork.6：胶囊面改真玻璃采样（推翻 fork.5「刻意实色防双采样」的决定）——调用点已移到
+    // 录制 Box 之外的同级覆盖层（见 ThreadPage 内容区），消费者不在被录制子树内、采样坐标
+    // 与纹理同系不越界；与 Dock 同屏双采样靠参数化解：透镜取中档 ×0.6（弱于 Dock 的小面
+    // 全量透镜）、纱在当前材质规格上 +0.10 略增稠，压住同屏时的碎字与伪影，不退回实色。
+    // 无采样源（API<31）时回落原 threadBottomBar 实色面。
+    val backdrop = LocalGlassBackdrop.current
+    val glassSettings = rememberGlassSettings()
+    val barShape = RoundedCornerShape(28.dp)
     Column(
         modifier = modifier
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp), clip = false)
-            .clip(RoundedCornerShape(28.dp))
-            .background(ExtendedTheme.colors.threadBottomBar)
+            .shadow(elevation = 8.dp, shape = barShape, clip = false)
+            .then(
+                if (backdrop != null) {
+                    Modifier
+                        .glassSurface(
+                            backdrop = backdrop,
+                            spec = glassSettings.spec
+                                .copy(
+                                    tintAlphaDark = (glassSettings.spec.tintAlphaDark + 0.10f)
+                                        .coerceAtMost(0.9f),
+                                    tintAlphaLight = (glassSettings.spec.tintAlphaLight + 0.10f)
+                                        .coerceAtMost(0.9f)
+                                )
+                                .withLensScale(0.6f),
+                            isNightMode = ExtendedTheme.colors.isNightMode,
+                            shape = barShape,
+                            backdropShape = { barShape },
+                            tintShape = barShape,
+                        )
+                        .clip(barShape)
+                } else {
+                    Modifier
+                        .clip(barShape)
+                        .background(ExtendedTheme.colors.threadBottomBar)
+                }
+            )
     ) {
         Row(
             modifier = Modifier
