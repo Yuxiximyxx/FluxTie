@@ -8,7 +8,6 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.toastShort
-import com.huanchengfly.tieba.post.ui.widgets.compose.SplashState
 import com.huanchengfly.tieba.post.utils.PermissionUtils
 import com.huanchengfly.tieba.post.utils.appPreferences
 import com.huanchengfly.tieba.post.utils.requestPermission
@@ -22,7 +21,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -85,8 +83,7 @@ class UpdateManager @Inject constructor(
                 notification.cancel()
             }
             if (!context.appPreferences.autoCheckUpdate) return@launch
-            // 等启动屏结束，避免弹窗被遮挡
-            SplashState.finished.first { it }
+            // fork.7：开屏已删除，不再等待开屏结束信号；保留短延迟避开冷启动首帧
             delay(600)
             if (!context.appPreferences.autoCheckUpdate) return@launch
             if (_state.value != UpdateUiState.Idle) return@launch

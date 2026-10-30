@@ -486,14 +486,6 @@ fun HomePage(
     val showHistoryForum by remember { derivedStateOf { context.appPreferences.homePageShowHistoryForum && historyForums.isNotEmpty() } }
     val isError by remember { derivedStateOf { error != null } }
 
-    LaunchedEffect(isLoading, hasLoaded) {
-        // 登录用户等首屏数据真正就绪再让启动屏退场(冷启动 isLoading 初始为 false,勿按首帧误判);
-        // 未登录无加载流程,直接就绪
-        if (!isLoading && (hasLoaded || !isLoggedIn)) {
-            com.huanchengfly.tieba.post.ui.widgets.compose.SplashState.markReady()
-        }
-    }
-
     onGlobalEvent<GlobalEvent.Refresh>(
         filter = { it.key == "home" }
     ) {

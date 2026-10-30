@@ -100,7 +100,6 @@ import com.huanchengfly.tieba.post.ui.utils.DevicePosture
 import com.huanchengfly.tieba.post.ui.utils.isBookPosture
 import com.huanchengfly.tieba.post.ui.utils.isSeparating
 import com.huanchengfly.tieba.post.update.UpdateManager
-import com.huanchengfly.tieba.post.ui.widgets.compose.AppSplashOverlay
 import com.huanchengfly.tieba.post.ui.widgets.compose.AlertDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.AvatarIcon
@@ -361,17 +360,10 @@ class MainActivityV2 : BaseComposeActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
-        splashScreen.setOnExitAnimationListener { splashScreenViewProvider ->
-            com.huanchengfly.tieba.post.ui.widgets.compose.SplashState.markSystemSplashDismissed()
-            splashScreenViewProvider.view.animate()
-                .alpha(0f)
-                .setDuration(240L)
-                .withEndAction {
-                    splashScreenViewProvider.remove()
-                }
-                .start()
-        }
+        // fork.7：开屏动画与图标已删除。installSplashScreen 仅保留 AndroidX 兼容库与
+        // Theme.Splash 的契约调用、不再设置退场动画监听；启动窗即 Theme.Splash 的
+        // 纯色空白帧（无图标、无动画），首帧绘制完成直接交接主界面。
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(0)
         window.setBackgroundDrawable(ColorDrawable(0))
@@ -383,12 +375,12 @@ class MainActivityV2 : BaseComposeActivity() {
             handleUpdateIntent(it)
         }
         launch {
-            // 延迟到应用内启动屏结束后再请求，避免弹窗被遮挡/打断
+            // 延迟请求，避免冷启动首帧即弹窗打断
             delay(2600)
             requestNotificationPermission()
         }
         launch {
-            // 启动静默检查更新（内部等启动屏结束；开关关闭时不打扰）
+            // 启动静默检查更新（开关关闭时不打扰）
             updateManager.autoCheckIfNeeded()
         }
     }
@@ -593,8 +585,6 @@ class MainActivityV2 : BaseComposeActivity() {
                 }
             }
         }
-
-        AppSplashOverlay()
     }
 
     @Composable

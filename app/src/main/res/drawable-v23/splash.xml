@@ -11,10 +11,5 @@
                 android:type="linear" />
         </shape>
     </item>
-    <item
-        android:width="120dp"
-        android:height="120dp"
-        android:gravity="center">
-        <bitmap android:src="@drawable/ic_splash" />
-    </item>
+    <!-- fork.7：开屏图标删除——原居中 120dp 的 @drawable/ic_splash 已移除，仅剩纯色帧 -->
 </layer-list>

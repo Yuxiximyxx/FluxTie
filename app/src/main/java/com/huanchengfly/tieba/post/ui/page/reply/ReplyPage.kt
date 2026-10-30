@@ -869,8 +869,9 @@ fun ReplyPage(
     // 键盘缩放、sheet 锚在物理屏底。fork.5 把 ReplyPageContent 内部的 IME 底部 padding
     // （=imeAnimationTarget 高度）原样留在卡内：padding 沦为卡底死空白、把卡撑高约一个
     // 键盘高度，功能行被顶离键盘、卡身悬在输入法上方（小乐真机截图实证）。修法是把让位
-    // 移到卡外：本包装层底部间隙随 imeAnimationTarget 高度走——键盘弹起时卡底边紧贴键盘
-    // 上沿，收起时回到 12dp 悬浮留距；卡内 sheet 路径的 IME/导航栏 padding 已同步移除
+    // 移到卡外：本包装层底部间隙随 imeAnimationTarget 高度走——键盘弹起时卡底边位于
+    // 键盘上沿上方 12dp（fork.7 调整，fork.6 的恰贴上沿太近），收起时回到 12dp 悬浮
+    // 留距；卡内 sheet 路径的 IME/导航栏 padding 已同步移除
     // （见 ReplyPageContent 的 parentModifier 与底部 padding 分工）。
     // fork.6【玻璃】：卡面改真玻璃——本目的地位于各页面组合树之外（应用级 sheet），页面
     // provide 的 LocalGlassBackdrop 直达不到，采样源经 GlassBackdropRegistry 取当前页面
@@ -889,7 +890,9 @@ fun ReplyPage(
             .distinctUntilChanged()
             .collect { value = it }
     }
-    val cardBottomGap = maxOf(with(density) { imeTargetBottomPx.toDp() }, 12.dp)
+    // fork.7：弹起时间隙 = IME 高度 + 12dp——fork.6 恰贴键盘上沿被小乐判太近，
+    // 与收起时的 12dp 悬浮留距统一（IME 收起时高度为 0，结果自然回到 12dp）。
+    val cardBottomGap = with(density) { imeTargetBottomPx.toDp() } + 12.dp
     val backdrop = GlassBackdropRegistry.active
     val glassSettings = rememberGlassSettings()
     val cardShape = RoundedCornerShape(24.dp)

@@ -174,8 +174,8 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="windowSplashScreenBackground">@color/colorSplashBg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_screen_anim</item>
-        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <!-- fork.7：开屏动画与图标删除——动画图标换透明占位，启动窗仅剩纯色空白帧 -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_empty</item>
         <item name="postSplashScreenTheme">@style/Theme.NewAppTheme</item>
     </style>
 
