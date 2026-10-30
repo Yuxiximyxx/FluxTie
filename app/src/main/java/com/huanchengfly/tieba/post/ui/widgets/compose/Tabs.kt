@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.primarySurface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.debugInspectorInfo
 import androidx.compose.ui.unit.Constraints
@@ -509,6 +511,9 @@ fun TabClickMenu(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     selectedContentColor: Color = LocalContentColor.current,
     unselectedContentColor: Color = selectedContentColor.copy(alpha = ContentAlpha.medium),
+    // fork.5（MIUIX 胶囊筛选）：为 true 时文字 + 下拉箭头一起包进胶囊
+    //（选中 = accent 底、未选中 = chip 底，文字色仍由调用方的 text 决定）；默认 false 不影响其他用方。
+    capsule: Boolean = false,
 ) {
     TabClickMenu(
         selected = selected,
@@ -533,12 +538,7 @@ fun TabClickMenu(
         val tabTextStyle =
             MaterialTheme.typography.button.copy(fontSize = 13.sp, letterSpacing = 0.sp)
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .height(48.dp)
-                .padding(start = 16.dp)
-        ) {
+        val tabLabel: @Composable () -> Unit = {
             ProvideTextStyle(value = tabTextStyle) {
                 text()
             }
@@ -550,6 +550,35 @@ fun TabClickMenu(
                     .rotate(rotate)
                     .alpha(alpha)
             )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .height(48.dp)
+                .padding(start = 16.dp)
+        ) {
+            if (capsule) {
+                val colors = ExtendedTheme.colors
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(100))
+                        .background(if (selected) colors.accent else colors.chip)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 未显式指定颜色的文字/箭头在胶囊上改用对比色（调用方显式设色时以其为准）
+                    CompositionLocalProvider(
+                        LocalContentColor provides if (selected) colors.onAccent else colors.textSecondary
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            tabLabel()
+                        }
+                    }
+                }
+            } else {
+                tabLabel()
+            }
         }
     }
 }

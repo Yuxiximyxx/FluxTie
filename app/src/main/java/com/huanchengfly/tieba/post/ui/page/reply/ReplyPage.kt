@@ -850,19 +850,33 @@ fun ReplyPage(
     tbs: String? = null,
     viewModel: ReplyViewModel = pageViewModel(),
 ) {
-    ReplyPageContent(
-        viewModel = viewModel,
-        onBack = { navigator.navigateUp() },
-        forumId = forumId,
-        forumName = forumName,
-        threadId = threadId,
-        postId = postId,
-        subPostId = subPostId,
-        replyUserId = replyUserId,
-        replyUserName = replyUserName,
-        replyUserPortrait = replyUserPortrait,
-        tbs = tbs
-    )
+    // fork.5：发帖/回复编辑器改悬浮窗口——宿主 sheet 底板已透明（见 MainActivityV2），
+    // 这里自带四周留边、四角全圆角的浮动卡片（scrim 压暗背景），不再贴底贴边；
+    // 编辑功能与提交链路（ReplyPageContent 本体）不动。卡内原有 navigationBarsPadding
+    // 与 IME 底部让位逻辑保留，卡片底边距与之叠加成悬浮间隙。
+    Box(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = ExtendedTheme.colors.windowBackground,
+            elevation = 8.dp,
+        ) {
+            ReplyPageContent(
+                viewModel = viewModel,
+                onBack = { navigator.navigateUp() },
+                forumId = forumId,
+                forumName = forumName,
+                threadId = threadId,
+                postId = postId,
+                subPostId = subPostId,
+                replyUserId = replyUserId,
+                replyUserName = replyUserName,
+                replyUserPortrait = replyUserPortrait,
+                tbs = tbs
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

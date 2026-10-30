@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -263,6 +264,16 @@ private fun ForumHeader(
 //                        modifier = Modifier.size(16.dp)
 //                    )
                 }
+                // fork.5（MIUIX 吧页效果图）：吧名下补数据副标题「关注 X · 帖子 Y」
+                //（member_num/thread_num 接口现成，旧版该统计卡被注释下线、此处以副标题形式回归）
+                Text(
+                    text = "${forum.member_num.getShortNumString()} " +
+                        stringResource(id = R.string.text_stat_follow) +
+                        " · ${forum.thread_num.getShortNumString()} " +
+                        stringResource(id = R.string.text_stat_threads),
+                    style = MaterialTheme.typography.caption,
+                    color = ExtendedTheme.colors.textSecondary,
+                )
                 AnimatedVisibility(visible = forum.is_like == 1) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         LinearProgressIndicator(
@@ -880,12 +891,8 @@ fun ForumPage(
 
                             ScrollableTabRow(
                                 selectedTabIndex = currentPage,
-                                indicator = { tabPositions ->
-                                    PagerTabIndicator(
-                                        pagerState = pagerState,
-                                        tabPositions = tabPositions
-                                    )
-                                },
+                                // fork.5（MIUIX 胶囊筛选）：选中态改由各 Tab 的胶囊呈现，下划线指示器退役
+                                indicator = {},
                                 divider = {},
                                 backgroundColor = Color.Transparent,
                                 contentColor = ExtendedTheme.colors.primary,
@@ -941,7 +948,8 @@ fun ForumPage(
                                         )
                                     },
                                     selectedContentColor = ExtendedTheme.colors.primary,
-                                    unselectedContentColor = ExtendedTheme.colors.textSecondary
+                                    unselectedContentColor = ExtendedTheme.colors.textSecondary,
+                                    capsule = true
                                 )
                                 Tab(
                                     selected = currentPage == 1,
@@ -959,8 +967,9 @@ fun ForumPage(
                                             .height(48.dp)
                                             .padding(horizontal = 16.dp)
                                     ) {
-                                        Text(
+                                        ForumTabCapsule(
                                             text = stringResource(id = R.string.tab_forum_good),
+                                            selected = currentPage == 1,
                                             style = tabTextStyle
                                         )
                                     }
@@ -1001,7 +1010,8 @@ fun ForumPage(
                                                 )
                                             },
                                             selectedContentColor = ExtendedTheme.colors.primary,
-                                            unselectedContentColor = ExtendedTheme.colors.textSecondary
+                                            unselectedContentColor = ExtendedTheme.colors.textSecondary,
+                                            capsule = true
                                         )
                                     } else {
                                         Tab(
@@ -1020,8 +1030,9 @@ fun ForumPage(
                                                     .height(48.dp)
                                                     .padding(horizontal = 16.dp)
                                             ) {
-                                                Text(
+                                                ForumTabCapsule(
                                                     text = tab.tabName,
+                                                    selected = currentPage == tabIndex,
                                                     style = tabTextStyle
                                                 )
                                             }
@@ -1065,6 +1076,29 @@ fun ForumPage(
             }
             }
         }
+    }
+}
+
+/** fork.5（MIUIX 胶囊筛选）：吧页筛选 Tab 的胶囊标签——选中 accent 底白字、未选中 chip 底次级色字。 */
+@Composable
+internal fun ForumTabCapsule(
+    text: String,
+    selected: Boolean,
+    style: androidx.compose.ui.text.TextStyle,
+) {
+    val colors = ExtendedTheme.colors
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100))
+            .background(if (selected) colors.accent else colors.chip)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = style,
+            color = if (selected) colors.onAccent else colors.textSecondary
+        )
     }
 }
 

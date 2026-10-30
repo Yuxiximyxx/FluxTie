@@ -637,14 +637,15 @@ private fun DockIndicator(
             )
             .drawBehind {
                 val cornerRadius = CornerRadius(size.height / 2f)
-                // 统一规格：选中 = 深色椭圆高亮，其上承载强调色图标+文字；
-                // fork.3 提亮一档（真机反馈偏暗）：浅色由近黑实色 #1B1C1F α0.92 改更透的深灰
-                // #3C3D42 α0.80，夜间由纯黑 α0.55 改深灰 #26262B α0.60，避免整块压成黑饼；
-                // 按压时略微变透，让透镜折射透出来，避免完全压死玻璃感
+                // 统一规格：选中 = 椭圆高亮，其上承载强调色图标+文字；
+                // fork.3 提亮一档：夜间由纯黑 α0.55 改深灰 #26262B α0.60，避免整块压成黑饼；
+                // fork.5 再提亮浅色（真机反馈 #3C3D42 α0.80 在浅色玻璃上仍读成近黑、图标文字发闷）：
+                // 浅色改中浅灰 #55565C α0.38——叠在近白玻璃上实际呈浅灰，强调色图标+文字可读，
+                // 同时更透让透镜折射透出来；夜间不动。按压时略微变透的逻辑保留。
                 val darkFill = if (isNightMode) {
                     Color(0xFF26262B).copy(alpha = 0.60f * (1f - 0.15f * bloomProgress))
                 } else {
-                    Color(0xFF3C3D42).copy(alpha = 0.80f * (1f - 0.15f * bloomProgress))
+                    Color(0xFF55565C).copy(alpha = 0.38f * (1f - 0.15f * bloomProgress))
                 }
                 drawRoundRect(color = darkFill, cornerRadius = cornerRadius)
                 drawRoundRect(

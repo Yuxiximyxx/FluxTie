@@ -24,6 +24,7 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -132,16 +133,24 @@ fun SubPostsSheetPage(
     viewModel: SubPostsViewModel = pageViewModel()
 ) {
     ProvideNavigator(navigator) {
-        SubPostsContent(
-            viewModel = viewModel,
-            forumId = forumId,
-            threadId = threadId,
-            postId = postId,
-            subPostId = subPostId,
-            loadFromSubPost = loadFromSubPost,
-            isSheet = true,
-            onNavigateUp = { navigator.navigateUp() }
-        )
+        // fork.5：应用级 sheet 宿主底板已改透明（为 ReplyPage 悬浮卡片让路），
+        // 本页自带与旧宿主一致的底板（顶圆角 12dp + windowBackground），观感不变。
+        Surface(
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+            color = ExtendedTheme.colors.windowBackground,
+            elevation = 0.dp,
+        ) {
+            SubPostsContent(
+                viewModel = viewModel,
+                forumId = forumId,
+                threadId = threadId,
+                postId = postId,
+                subPostId = subPostId,
+                loadFromSubPost = loadFromSubPost,
+                isSheet = true,
+                onNavigateUp = { navigator.navigateUp() }
+            )
+        }
     }
 }
 

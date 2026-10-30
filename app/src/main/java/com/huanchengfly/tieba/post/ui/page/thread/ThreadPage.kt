@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.size
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.ButtonDefaults
@@ -48,6 +50,7 @@ import androidx.compose.material.SnackbarDuration
 import androidx.compose.material.SnackbarResult
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
 import androidx.compose.material.icons.automirrored.rounded.ChromeReaderMode
@@ -82,6 +85,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -165,14 +169,18 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.LocalGlassBackdrop
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyLazyColumn
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
 import com.huanchengfly.tieba.post.ui.widgets.compose.glassBackdropSource
+import com.huanchengfly.tieba.post.ui.widgets.compose.glassSurface
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassBackdrop
+import com.huanchengfly.tieba.post.ui.widgets.compose.rememberGlassSettings
 import com.huanchengfly.tieba.post.ui.widgets.compose.supportsGlassSampling
+import com.huanchengfly.tieba.post.ui.widgets.compose.withLensScale
 import com.huanchengfly.tieba.post.ui.widgets.compose.OriginThreadCard
 import com.huanchengfly.tieba.post.ui.widgets.compose.PromptDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.Sizes
 import com.huanchengfly.tieba.post.ui.widgets.compose.TextWithMinWidth
 import com.huanchengfly.tieba.post.ui.widgets.compose.TipScreen
 import com.huanchengfly.tieba.post.ui.widgets.compose.TitleCentredToolbar
+import com.huanchengfly.tieba.post.ui.widgets.compose.TopAppBarContainer
 import com.huanchengfly.tieba.post.ui.widgets.compose.UserHeader
 import com.huanchengfly.tieba.post.ui.widgets.compose.VerticalDivider
 import com.huanchengfly.tieba.post.ui.widgets.compose.VerticalGrid
@@ -299,7 +307,9 @@ private fun BottomBarAgreeBtn(
         shape = RoundedCornerShape(0),
         contentPadding = PaddingValues(horizontal = 4.dp),
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = ExtendedTheme.colors.bottomBar,
+            // fork.5：回复条改悬浮胶囊后，赞钮改透明底融进胶囊面
+            //（原 bottomBar 实色块在胶囊内会显成异色方块）
+            backgroundColor = Color.Transparent,
             contentColor = animatedColor
         ),
         interactionSource = interactionSource,
@@ -1345,6 +1355,8 @@ fun ThreadPage(
                 topBar = {
                     TopBar(
                         forum = forum,
+                        totalFloors = thread?.get { replyNum.toInt() },
+                        isCollected = isCollected,
                         onBack = { navigator.navigateUp() },
                         onForumClick = {
                             val forumName = forum?.get { name }
@@ -1353,57 +1365,55 @@ fun ThreadPage(
                                     forumName
                                 )
                             )
-                        }
-                    )
-                },
-                bottomBar = {
-                    BottomBar(
-                        user = user,
-                        onClickReply = {
-                            navigator.navigate(
-                                ReplyPageDestination(
-                                    forumId = curForumId ?: 0,
-                                    forumName = forum?.get { name }.orEmpty(),
-                                    threadId = threadId,
-                                )
-                            )
                         },
-                        onAgree = {
-                            val firstPostId =
-                                thread?.get { firstPostId }.takeIf { it != 0L }
-                                    ?: firstPost?.get { id }
-                                    ?: 0L
-                            if (firstPostId != 0L) viewModel.send(
-                                ThreadUiIntent.AgreeThread(
-                                    threadId,
-                                    firstPostId,
-                                    !hasThreadAgreed
+                        onCollectClick = {
+                            if (isCollected) {
+                                viewModel.send(
+                                    ThreadUiIntent.RemoveFavorite(
+                                        threadId,
+                                        forum?.get { id } ?: forumId,
+                                        anti?.get { tbs }
+                                    )
                                 )
-                            )
+                            } else {
+                                lastVisibilityPost?.let {
+                                    viewModel.send(
+                                        ThreadUiIntent.AddFavorite(
+                                            threadId,
+                                            it.get { id },
+                                            it.get { floor }
+                                        )
+                                    )
+                                }
+                            }
                         },
-                        onClickMore = {
+                        onMoreClick = {
                             if (bottomSheetState.isVisible) {
                                 closeBottomSheet()
                             } else {
                                 openBottomSheet()
                             }
-                        },
-                        hasAgreed = hasThreadAgreed,
-                        agreeNum = threadAgreeNum,
-                        modifier = Modifier
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = {}
-                            )
+                        }
                     )
                 },
+                // fork.5：原 scaffold bottomBar 槽（贴底通栏回复条）退役——回复条改悬浮胶囊
+                // 覆盖在内容区底部（见下方内容 Box 内的同名调用），scaffold 不再为其预留底距，
+                // 列表改用 contentPadding 补尾部留白。
             ) { paddingValues ->
                 ModalBottomSheetLayout(
                     sheetState = bottomSheetState,
                     sheetShape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                    sheetBackgroundColor = ExtendedTheme.colors.windowBackground,
+                    // fork.5【玻璃补齐】：本页有页面级采样源（LocalGlassBackdrop，录的是内容区
+                    // pullRefresh Box）且菜单 sheet 内容位于录制子树之外、采样坐标不越出纹理
+                    // （sheet 覆盖区与内容纹理同坐标系），故 ThreadMenu 面转真玻璃；
+                    // 无采样源（API<31）时保持原实色底。见 sheetContent 包裹。
+                    sheetBackgroundColor = if (LocalGlassBackdrop.current != null) {
+                        Color.Transparent
+                    } else {
+                        ExtendedTheme.colors.windowBackground
+                    },
                     sheetContent = {
+                        GlassSheetSurface {
                         ThreadMenu(
                             isSeeLz = isSeeLz,
                             isCollected = isCollected,
@@ -1516,6 +1526,7 @@ fun ThreadPage(
                                 .padding(vertical = 16.dp)
                                 .defaultMinSize(minHeight = 1.dp)
                         )
+                        }
                     },
                     scrimColor = Color.Transparent,
                     modifier = Modifier
@@ -1567,13 +1578,17 @@ fun ThreadPage(
                             lazyListState = lazyListState,
                             isEmpty = data.isEmpty(),
                             preloadCount = loadMorePreloadCount,
-                            // 内容区已被 Scaffold 底栏避让(容器底缘即回复栏上沿),
-                            // 胶囊从回复栏后滑出、停在栏上方 8dp 处即可,不能再叠加一次栏高
-                            indicatorBottomInset = 8.dp,
+                            // fork.5：回复条已改悬浮胶囊（不再占 scaffold 底栏），容器底缘即
+                            // 屏幕底缘；加载胶囊需停在悬浮回复条上方：底距 ≈ 导航栏让位 +
+                            // 悬浮间距 12 + 胶囊高约 58 + 间隔 8，静态取 84.dp。
+                            indicatorBottomInset = 84.dp,
                         ) {
                             MyLazyColumn(
                                 state = lazyListState,
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
+                                // fork.5：悬浮回复条浮在内容上方，列表尾部留白保证最后一楼
+                                // 能完整滚出胶囊遮挡区（胶囊高约 58 + 底距 12 + 导航栏让位余量）
+                                contentPadding = PaddingValues(bottom = 120.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 item(key = "FirstPost") {
@@ -1915,6 +1930,55 @@ fun ThreadPage(
                             backgroundColor = ExtendedTheme.colors.pullRefreshIndicator,
                             contentColor = ExtendedTheme.colors.onPrimary,
                         )
+
+                        // fork.5：悬浮回复条——脱离底边、两侧留距的胶囊浮在内容上方
+                        // （与悬浮 Dock 同一语言：实色胶囊 + 阴影，不采样玻璃以免与 Dock
+                        // 采样面叠加）；页内菜单 sheet 打开时隐藏，避免与菜单重叠。
+                        if (bottomSheetState.targetValue == ModalBottomSheetValue.Hidden) {
+                            BottomBar(
+                                user = user,
+                                onClickReply = {
+                                    navigator.navigate(
+                                        ReplyPageDestination(
+                                            forumId = curForumId ?: 0,
+                                            forumName = forum?.get { name }.orEmpty(),
+                                            threadId = threadId,
+                                        )
+                                    )
+                                },
+                                onAgree = {
+                                    val firstPostId =
+                                        thread?.get { firstPostId }.takeIf { it != 0L }
+                                            ?: firstPost?.get { id }
+                                            ?: 0L
+                                    if (firstPostId != 0L) viewModel.send(
+                                        ThreadUiIntent.AgreeThread(
+                                            threadId,
+                                            firstPostId,
+                                            !hasThreadAgreed
+                                        )
+                                    )
+                                },
+                                onClickMore = {
+                                    if (bottomSheetState.isVisible) {
+                                        closeBottomSheet()
+                                    } else {
+                                        openBottomSheet()
+                                    }
+                                },
+                                hasAgreed = hasThreadAgreed,
+                                agreeNum = threadAgreeNum,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .navigationBarsPadding()
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {}
+                                    )
+                            )
+                        }
                     }
                 }
             }
@@ -1926,49 +1990,114 @@ fun ThreadPage(
 @Composable
 private fun TopBar(
     forum: ImmutableHolder<SimpleForum>?,
+    totalFloors: Int?,
+    isCollected: Boolean,
     onBack: () -> Unit,
     onForumClick: () -> Unit,
+    onCollectClick: () -> Unit,
+    onMoreClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    TitleCentredToolbar(
-        title = {
-            forum?.let {
-                if (forum.get { name }.isNotBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 48.dp)
-                            .height(IntrinsicSize.Min)
-                            .clip(RoundedCornerShape(100))
-                            .background(ExtendedTheme.colors.chip)
-                            .debounceClickable(onClick = onForumClick)
-                            .padding(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Avatar(
-                            data = forum.get { avatar },
-                            contentDescription = it.get { name },
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f)
-                        )
-
+    // fork.5（MIUIX 帖子页效果图）：顶栏改左对齐大标题式——返回 + 吧头像/吧名（副标题
+    // 「共 N 楼」），右侧圆形钮（收藏星标 / 更多菜单，与底部悬浮回复条的更多为同一菜单）。
+    // 原居中吧名胶囊（TitleCentredToolbar）退役；状态栏让位仍走 TopAppBarContainer。
+    TopAppBarContainer(
+        topBar = {
+    TopAppBar(
+        backgroundColor = ExtendedTheme.colors.topBar,
+        contentColor = ExtendedTheme.colors.onTopBar,
+        elevation = 0.dp
+    ) {
+        BackNavigationIcon(onBack)
+        forum?.let {
+            if (forum.get { name }.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .debounceClickable(onClick = onForumClick)
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Avatar(
+                        data = forum.get { avatar },
+                        contentDescription = it.get { name },
+                        size = Sizes.Small,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
                         Text(
                             text = stringResource(id = R.string.title_forum, it.get { name }),
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
                             color = ExtendedTheme.colors.text,
-                            modifier = Modifier.padding(horizontal = 8.dp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (totalFloors != null && totalFloors > 0) {
+                            Text(
+                                text = stringResource(
+                                    id = R.string.tip_thread_total_floors,
+                                    totalFloors
+                                ),
+                                fontSize = 11.sp,
+                                color = ExtendedTheme.colors.textSecondary,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
-        },
-        navigationIcon = {
-            BackNavigationIcon(onBack)
+        }
+        if (forum?.get { name }.isNullOrBlank()) {
+            Spacer(modifier = Modifier.weight(1f))
+        }
+        TopBarRoundButton(
+            onClick = onCollectClick,
+            contentDescription = stringResource(
+                id = if (isCollected) R.string.title_collected else R.string.title_uncollected
+            )
+        ) {
+            Icon(
+                imageVector = if (isCollected) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                contentDescription = null,
+                tint = if (isCollected) ExtendedTheme.colors.accent else ExtendedTheme.colors.text,
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        TopBarRoundButton(
+            onClick = onMoreClick,
+            contentDescription = stringResource(id = R.string.btn_more)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.MoreVert,
+                contentDescription = null,
+                tint = ExtendedTheme.colors.text,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+    }
         },
         modifier = modifier
     )
+}
+
+/** 顶栏圆形钮（效果图同款：chip 底色圆面 + 图标）。 */
+@Composable
+private fun TopBarRoundButton(
+    onClick: () -> Unit,
+    contentDescription: String?,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(ExtendedTheme.colors.chip)
+            .debounceClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
 }
 
 @Composable
@@ -1981,14 +2110,20 @@ private fun BottomBar(
     hasAgreed: Boolean = false,
     agreeNum: Long = 0,
 ) {
+    // fork.5：回复条改悬浮胶囊——调用方以 align + 两侧 16dp + 底部 12dp 的 modifier 把它
+    // 浮在内容上方，这里只负责胶囊本体（全圆角 + 阴影 + threadBottomBar 实色面，与悬浮
+    // Dock 同一语言；不做玻璃采样，避免与 Dock 采样面在同屏叠加）。原贴底通栏的导航栏
+    // 让位 Spacer 随通栏形态一并退役（让位改由调用方 navigationBarsPadding 承担）。
     Column(
-        modifier = Modifier.background(ExtendedTheme.colors.threadBottomBar)
+        modifier = modifier
+            .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp), clip = false)
+            .clip(RoundedCornerShape(28.dp))
+            .background(ExtendedTheme.colors.threadBottomBar)
     ) {
         Row(
             modifier = Modifier
                 .height(IntrinsicSize.Min)
-                .then(modifier)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1998,17 +2133,17 @@ private fun BottomBar(
                     size = Sizes.Tiny,
                     contentDescription = user.get { name },
                     modifier = Modifier
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 10.dp)
                 )
 
                 Row(
                     modifier = Modifier
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 10.dp)
                         .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(100))
                         .background(ExtendedTheme.colors.bottomBarSurface)
                         .debounceClickable(onClick = onClickReply)
-                        .padding(8.dp),
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                 ) {
                     Text(
                         text = stringResource(id = R.string.tip_reply_thread),
@@ -2044,16 +2179,6 @@ private fun BottomBar(
                     tint = ExtendedTheme.colors.textSecondary,
                 )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .requiredHeightIn(min = if (LocalContext.current.appPreferences.liftUpBottomBar) 16.dp else 0.dp)
-        ) {
-            Spacer(
-                modifier = Modifier
-                    .windowInsetsBottomHeight(WindowInsets.navigationBars)
-            )
         }
     }
 }
@@ -2450,6 +2575,35 @@ fun UserNameText(
         ),
         modifier = modifier
     )
+}
+
+/**
+ * fork.5【玻璃补齐】：页内菜单 sheet 的玻璃面。有页面采样源（LocalGlassBackdrop）时给
+ * sheet 内容套真玻璃（大面档透镜 ×0.35，与 fork.4 菜单同规范）；无采样源时原样透传，
+ * 由 sheet 宿主的实色底兜底。采样安全性：录制对象是内容区 Box，sheet 内容是其同级上层、
+ * 不在录制子树内，采样坐标不越界（同 fork.4 三页 ClickMenu 的既有路径）。
+ */
+@Composable
+private fun GlassSheetSurface(content: @Composable () -> Unit) {
+    val backdrop = LocalGlassBackdrop.current
+    if (backdrop == null) {
+        content()
+        return
+    }
+    val settings = rememberGlassSettings()
+    val shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+    Box(
+        modifier = Modifier.glassSurface(
+            backdrop = backdrop,
+            spec = settings.spec.withLensScale(0.35f),
+            isNightMode = ExtendedTheme.colors.isNightMode,
+            shape = shape,
+            backdropShape = { shape },
+            tintShape = shape,
+        )
+    ) {
+        content()
+    }
 }
 
 @Composable

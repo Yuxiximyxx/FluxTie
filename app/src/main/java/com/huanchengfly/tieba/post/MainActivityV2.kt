@@ -573,7 +573,11 @@ class MainActivityV2 : BaseComposeActivity() {
                     ModalBottomSheetLayout(
                         bottomSheetNavigator = navigator,
                         sheetShape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                        sheetBackgroundColor = ExtendedTheme.colors.windowBackground,
+                        // fork.5：宿主底板改透明 + 去宿主阴影，呈现交给各目的地自理——
+                        // ReplyPage 自带四周留边的悬浮卡片（发帖/回复改悬浮窗口），
+                        // SubPostsSheetPage 自带与旧宿主同观感的底板（顶圆角 + windowBackground）。
+                        sheetBackgroundColor = Color.Transparent,
+                        sheetElevation = 0.dp,
                         scrimColor = Color.Black.copy(alpha = 0.32f),
                     ) {
                         DestinationsNavHost(
