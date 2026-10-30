@@ -1368,13 +1368,19 @@ fun ThreadPage(
                         },
                         onCollectClick = {
                             if (isCollected) {
-                                viewModel.send(
-                                    ThreadUiIntent.RemoveFavorite(
-                                        threadId,
-                                        forum?.get { id } ?: forumId,
-                                        anti?.get { tbs }
+                                // 与下方 ThreadMenu 的收藏同一语义：吧 ID 未就绪
+                                //（forum 未加载且入参 forumId 为空）时安全不执行，
+                                // 不对可空 ID 硬解包。
+                                val fid = forum?.get { id } ?: forumId
+                                if (fid != null) {
+                                    viewModel.send(
+                                        ThreadUiIntent.RemoveFavorite(
+                                            threadId,
+                                            fid,
+                                            anti?.get { tbs }
+                                        )
                                     )
-                                )
+                                }
                             } else {
                                 lastVisibilityPost?.let {
                                     viewModel.send(
