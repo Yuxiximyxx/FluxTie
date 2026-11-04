@@ -4,6 +4,8 @@
     <color name="ic_launcher_new_invert_background">#FFFFFFFF</color>
     <!-- 默认启动图标的夜间底板，仅由 mipmap-night 自适应图标引用。对齐深色导航面。 -->
     <color name="ic_launcher_new_night_background">#FF15202B</color>
+    <!-- 夜间别名（.MainActivityIconNight）自适应图标底板：哑光中性黑，与定版夜间位图一致。 -->
+    <color name="ic_launcher_night_background">#FF171717</color>
     <color name="ic_launcher_background">#FF2E60B0</color>
 
     <color name="ic_launcher_new_themed_background">#FF5588D7</color>
