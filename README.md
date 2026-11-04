@@ -31,7 +31,7 @@
 
 签名为自有证书：与上游同包名、不同证书，**安装本 fork 版前需先卸载上游版**，之后可直接覆盖升级。
 
-当前版本：**v1.1.0-fork.7** —— [Release 下载](https://github.com/Yuxiximyxx/FluxTie/releases/tag/v1.1.0-fork.7)
+当前版本：**v1.1.0-fork.8** —— [Release 下载](https://github.com/Yuxiximyxx/FluxTie/releases/tag/v1.1.0-fork.8)
 
 <p align="center">
   <img src="docs/images/showcase_hero.png?v=1.1.0" alt="FluxTie 主视觉" />
@@ -151,6 +151,18 @@ FluxTie 的开发与迭代离不开 [Linux.do](https://linux.do/) 社区。感�
 - [zzc10086/TiebaLite](https://github.com/zzc10086/TiebaLite)：本项目所基于的 4.0-dev 分支。
 - [Lingyan000/fluxdo](https://github.com/Lingyan000/fluxdo)：外观与界面设计参考。
 - [aiotieba](https://github.com/Starry-OvO/aiotieba) 与 [tbclient.protobuf](https://github.com/n0099/tbclient.protobuf)：贴吧协议研究参考。
+
+## Star History
+
+<p align="center">
+  <a href="https://star-history.com/#makise2060/FluxTie&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=makise2060/FluxTie&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=makise2060/FluxTie&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=makise2060/FluxTie&type=Date" />
+    </picture>
+  </a>
+</p>
 
 ## License
 

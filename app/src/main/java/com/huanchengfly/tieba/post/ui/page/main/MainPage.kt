@@ -3,8 +3,8 @@ package com.huanchengfly.tieba.post.ui.page.main
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.EaseInCubic
 import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -37,9 +38,16 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -52,6 +60,7 @@ import com.huanchengfly.tieba.post.arch.collectPartialAsState
 import com.huanchengfly.tieba.post.arch.emitGlobalEvent
 import com.huanchengfly.tieba.post.arch.pageViewModel
 import com.huanchengfly.tieba.post.rememberPreferenceAsState
+import com.huanchengfly.tieba.post.ui.common.anim.MotionTokens
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.huanchengfly.tieba.post.ui.common.windowsizeclass.WindowHeightSizeClass
 import com.huanchengfly.tieba.post.ui.common.windowsizeclass.WindowWidthSizeClass
@@ -79,6 +88,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import com.huanchengfly.tieba.post.utils.AccountUtil.LocalAccount
 
 @Composable
@@ -182,7 +192,7 @@ fun MainPage(
             listOfNotNull(
                 NavigationItem(
                     id = "home",
-                    icon = { AnimatedImageVector.animatedVectorResource(id = R.drawable.ic_animated_rounded_inventory_2) },
+                    icon = { AnimatedImageVector.animatedVectorResource(id = R.drawable.ic_animated_rounded_home) },
                     title = { stringResource(id = R.string.title_main) },
                     content = {
                         HomePage(
@@ -232,6 +242,9 @@ fun MainPage(
             ).toImmutableList()
         }
     }
+    // hideExplore 变化或进程恢复时 currentPosition 可能短暂越界（如保存了 3 但列表已缩到 3 项），
+    // 复位 LaunchedEffect 要到组合之后才跑；所有读取统一走安全夹取，避免绘制期越界闪退（issue #8）
+    val safeCurrentPosition = currentPosition.coerceIn(0, navigationItems.lastIndex)
     val navigationType by remember {
         derivedStateOf {
             when (windowWidthSizeClass) {
@@ -282,7 +295,7 @@ fun MainPage(
     }
     val onReselected: (Int) -> Unit = {
         coroutineScope.emitGlobalEvent(
-            GlobalEvent.Refresh(key = navigationItems[it].id)
+            GlobalEvent.Refresh(key = navigationItems[it.coerceIn(0, navigationItems.lastIndex)].id)
         )
     }
     val floatingBottomNav by rememberPreferenceAsState(
@@ -302,9 +315,42 @@ fun MainPage(
     // fork.6：与下方 LocalGlassBackdrop provide 同条件登记到 GlassBackdropRegistry，
     // 供组合树之外的应用级 sheet（ReplyPage 编辑卡）采样；经典布局未录制时登记 null
     PublishGlassBackdrop(if (floatingLayout && backdropBlurSupported) glassBackdrop else null)
+    // 上游 issue #16：滚动自动隐藏悬浮底栏。默认关；关闭时位移为 0，Dock 外观保持 fork 规格。
+    // 隐藏距离覆盖壳高 68dp + 壳内底边距 12dp + 导航栏，避免在底栏自己的 padding 上再叠一层。
+    val autoHideBottomBar by rememberPreferenceAsState(
+        key = booleanPreferencesKey("auto_hide_bottom_bar"),
+        defaultValue = LocalContext.current.appPreferences.autoHideBottomBar
+    )
+    val dockAutoHide = floatingLayout && autoHideBottomBar
+    var dockHiddenByScroll by remember { mutableStateOf(false) }
+    val dockAutoHideConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -3f) dockHiddenByScroll = true
+                else if (available.y > 3f) dockHiddenByScroll = false
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (available.y < -100f) dockHiddenByScroll = true
+                else if (available.y > 100f) dockHiddenByScroll = false
+                return Velocity.Zero
+            }
+        }
+    }
+    LaunchedEffect(safeCurrentPosition) {
+        dockHiddenByScroll = false
+    }
+    val density = LocalDensity.current
+    val dockHideTranslatePx = with(density) { (80.dp + navigationBarsInset).toPx() }
+    val dockHideProgress by animateFloatAsState(
+        targetValue = if (dockHiddenByScroll) 1f else 0f,
+        animationSpec = tween(durationMillis = 220, easing = EaseOutCubic),
+        label = "dockHideProgress"
+    )
     ProvideNavigator(navigator = navigator) {
         NavigationWrapper(
-            currentPosition = currentPosition,
+            currentPosition = safeCurrentPosition,
             onChangePosition = onChangePosition,
             onReselected = onReselected,
             navigationItems = navigationItems,
@@ -331,7 +377,7 @@ fun MainPage(
                             visible = navigationType == MainNavigationType.BOTTOM_NAVIGATION && !floatingBottomNav
                         ) {
                             BottomNavigation(
-                                currentPosition = currentPosition,
+                                currentPosition = safeCurrentPosition,
                                 onChangePosition = onChangePosition,
                                 onReselected = onReselected,
                                 navigationItems = navigationItems,
@@ -340,12 +386,20 @@ fun MainPage(
                         }
                     }
                 ) { paddingValues ->
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (dockAutoHide) {
+                                    Modifier.nestedScroll(dockAutoHideConnection)
+                                } else Modifier
+                            )
+                    ) {
                         AnimatedContent(
-                            targetState = currentPosition,
+                            targetState = safeCurrentPosition,
                             transitionSpec = {
-                                (fadeIn(tween(durationMillis = 220, delayMillis = 60, easing = EaseOutCubic)) togetherWith
-                                        fadeOut(tween(durationMillis = 140, easing = EaseInCubic)))
+                                (fadeIn(tween(durationMillis = MotionTokens.DurationNormal, delayMillis = 60, easing = MotionTokens.EasingEnter)) togetherWith
+                                        fadeOut(tween(durationMillis = MotionTokens.DurationExit, easing = MotionTokens.EasingExit)))
                             },
                             label = "mainPageContent",
                             modifier = Modifier
@@ -356,16 +410,23 @@ fun MainPage(
                                     } else Modifier
                                 ),
                         ) { page ->
+                            val safePage = page.coerceIn(0, navigationItems.lastIndex)
                             Box(modifier = Modifier.padding(paddingValues)) {
-                                saveableStateHolder.SaveableStateProvider(navigationItems[page].id) {
-                                    navigationItems[page].content()
+                                saveableStateHolder.SaveableStateProvider(navigationItems[safePage].id) {
+                                    navigationItems[safePage].content()
                                 }
                             }
                         }
                         if (floatingLayout) {
-                            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .offset {
+                                        IntOffset(0, (dockHideTranslatePx * dockHideProgress).roundToInt())
+                                    }
+                            ) {
                                 FloatingDock(
-                                    currentPosition = currentPosition,
+                                    currentPosition = safeCurrentPosition,
                                     onChangePosition = onChangePosition,
                                     onReselected = onReselected,
                                     navigationItems = navigationItems,

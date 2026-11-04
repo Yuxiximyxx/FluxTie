@@ -42,6 +42,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
@@ -119,6 +120,7 @@ import com.huanchengfly.tieba.post.ui.page.photoview.PhotoViewActivity
 import com.huanchengfly.tieba.post.ui.utils.getPhotoViewData
 import com.huanchengfly.tieba.post.ui.widgets.compose.video.DefaultVideoPlayerController
 import com.huanchengfly.tieba.post.ui.widgets.compose.video.OnFullScreenModeChangedListener
+import com.huanchengfly.tieba.post.ui.widgets.compose.video.VideoPlayerController
 import com.huanchengfly.tieba.post.ui.widgets.compose.video.VideoPlayerSource
 import com.huanchengfly.tieba.post.ui.widgets.compose.video.rememberVideoPlayerController
 import com.huanchengfly.tieba.post.utils.DateTimeUtils
@@ -237,6 +239,66 @@ fun UserHeader(
     )
 }
 
+/**
+ * 吧名模式卡片头部：吧头像+吧名+相对时间（原版贴吧风格），点击进入所在吧。
+ * 无吧头像数据时以圆底吧图标兜底。
+ */
+@Composable
+private fun ForumHeader(
+    forumName: String,
+    forumAvatar: String?,
+    timeProvider: () -> Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit = {},
+) {
+    val context = LocalContext.current
+    val time = remember(timeProvider) { timeProvider() }
+    UserHeader(
+        avatar = {
+            if (forumAvatar.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .size(Sizes.Small)
+                        .clip(CircleShape)
+                        .background(ExtendedTheme.colors.chip),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(id = R.drawable.ic_round_forum),
+                        contentDescription = stringResource(id = R.string.forum_portrait),
+                        modifier = Modifier.size(14.dp),
+                        tint = ExtendedTheme.colors.onChip
+                    )
+                }
+            } else {
+                Avatar(
+                    data = forumAvatar,
+                    size = Sizes.Small,
+                    contentDescription = stringResource(id = R.string.forum_portrait)
+                )
+            }
+        },
+        name = {
+            Text(
+                text = forumName,
+                color = ExtendedTheme.colors.text
+            )
+        },
+        onClick = onClick,
+        desc = {
+            Text(
+                text = DateTimeUtils.getRelativeTimeString(
+                    context,
+                    time.toString()
+                )
+            )
+        },
+        content = content,
+        modifier = modifier
+    )
+}
+
 
 @Composable
 fun Card(
@@ -250,34 +312,47 @@ fun Card(
     val cardModifier =
         if (onClick != null) Modifier.debounceClickable(onClick = onClick) else Modifier
 
-    val paddingModifier = if (action != null) Modifier.padding(top = 16.dp)
-    else Modifier.padding(vertical = 16.dp)
+    // 紧凑卡片：收窄留白与圆角，单屏容纳更多内容（issue #15）
+    val compact = LocalContext.current.appPreferences.compactFeedCard
+    val cardCorner = if (compact) 16.dp else 20.dp
+    val verticalPadding = if (compact) 10.dp else 16.dp
+    val outerHorizontalPadding = if (compact) 6.dp else 8.dp
+    val innerContentPadding = if (compact) PaddingValues(horizontal = 12.dp) else contentPadding
+
+    val paddingModifier = if (action != null) Modifier.padding(top = verticalPadding)
+    else Modifier.padding(vertical = verticalPadding)
 
     Column(
         modifier = cardModifier
             .then(modifier)
             // 卡片统一左右边距:上下由列表 spacedBy、左右由此处统一提供
-            .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .padding(horizontal = outerHorizontalPadding)
+            .clip(RoundedCornerShape(cardCorner))
             .background(ExtendedTheme.colors.card)
             // hairline 描边:与背景拉开卡片边界(M3 tonal 语言,无阴影)
             .border(
                 width = 0.5.dp,
                 color = ExtendedTheme.colors.divider.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(cardCorner)
             )
             .then(paddingModifier)
-            .padding(contentPadding)
+            .padding(innerContentPadding)
     ) {
         header()
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 8.dp)
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
+            modifier = Modifier.padding(top = if (compact) 6.dp else 8.dp)
         ) {
             content()
         }
         action?.invoke(this)
     }
+}
+
+/** 信息流卡片列表纵向间距（紧凑卡片开启时收窄）。 */
+@Composable
+fun feedCardListSpacing(): Dp {
+    return if (LocalContext.current.appPreferences.compactFeedCard) 8.dp else 12.dp
 }
 
 @Composable
@@ -395,7 +470,10 @@ fun FeedCardPlaceholder() {
             )
         },
         action = {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 repeat(3) {
                     ActionBtnPlaceholder(
                         modifier = Modifier.weight(1f)
@@ -722,6 +800,7 @@ fun ThreadReplyBtn(
             Icon(
                 imageVector = ImageVector.vectorResource(id = R.drawable.ic_comment_new),
                 contentDescription = stringResource(id = R.string.desc_comment),
+                modifier = Modifier.size(18.dp),
             )
         },
         text = {
@@ -877,7 +956,7 @@ fun ThreadAgreeBtn(
                     onClick()
                 }
             )
-            .padding(vertical = 16.dp, horizontal = 4.dp)
+            .padding(vertical = 16.dp)
     ) {
         AgreeHeart(
             hasAgree = hasAgree,
@@ -973,6 +1052,7 @@ fun ThreadShareBtn(
             Icon(
                 imageVector = Icons.Rounded.SwapCalls,
                 contentDescription = stringResource(id = R.string.desc_share),
+                modifier = Modifier.size(18.dp),
             )
         },
         text = {
@@ -1003,15 +1083,31 @@ fun FeedCard(
 ) {
     Card(
         header = {
+            // 吧名模式：头部显示所在吧而非作者（issue #13）
+            val showForumName = LocalContext.current.appPreferences.feedCardShowForumName
             val author = remember(item) { item.getNullableImmutable { author } }
-            author?.let {
-                UserHeader(
-                    userProvider = { it },
+            if (showForumName) {
+                val forumInfo = remember(item) { item.getNullableImmutable { forumInfo } }
+                ForumHeader(
+                    forumName = forumInfo?.get { name } ?: item.get { forumName },
+                    forumAvatar = forumInfo?.get { avatar },
                     timeProvider = { item.get { lastTimeInt } },
                     onClick = {
-                        onClickUser(it.get())
+                        forumInfo?.let { onClickForum(it.get()) }
                     },
-                ) { dislikeAction() }
+                ) {
+                    dislikeAction()
+                }
+            } else {
+                author?.let {
+                    UserHeader(
+                        userProvider = { it },
+                        timeProvider = { item.get { lastTimeInt } },
+                        onClick = {
+                            onClickUser(it.get())
+                        },
+                    ) { dislikeAction() }
+                }
             }
         },
         content = {
@@ -1042,10 +1138,16 @@ fun FeedCard(
                     )
                 }
 
-            ThreadForumInfo(item = item, onClick = onClickForum)
+            // 吧名模式下头部已展示所在吧，底部吧信息条隐藏
+            if (!LocalContext.current.appPreferences.feedCardShowForumName) {
+                ThreadForumInfo(item = item, onClick = onClickForum)
+            }
         },
         action = {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 ThreadShareBtn(
                     shareNum = item.get { shareNum }.toString(),
                     onClick = {},
@@ -1086,15 +1188,25 @@ fun FeedCard(
 ) {
     Card(
         header = {
-            UserHeader(
-                nameProvider = { item.get { threadInfo.author.name }.orEmpty() },
-                nameShowProvider = { item.get { threadInfo.author.showNickName } },
-                portraitProvider = { item.get { threadInfo.author.portrait } },
-                timeProvider = { item.get { threadInfo.createTime.toInt() } },
-                onClick = {
-                    onClickUser(item.get { threadInfo.userId })
-                },
-            )
+            // 吧名模式：头部显示所在吧而非作者（issue #13）
+            if (LocalContext.current.appPreferences.feedCardShowForumName) {
+                ForumHeader(
+                    forumName = item.get { threadInfo.forumName },
+                    forumAvatar = item.get { threadInfo.avatar },
+                    timeProvider = { item.get { threadInfo.createTime.toInt() } },
+                    onClick = { onClickForum(item.get { threadInfo.forumName }) },
+                )
+            } else {
+                UserHeader(
+                    nameProvider = { item.get { threadInfo.author.name }.orEmpty() },
+                    nameShowProvider = { item.get { threadInfo.author.showNickName } },
+                    portraitProvider = { item.get { threadInfo.author.portrait } },
+                    timeProvider = { item.get { threadInfo.createTime.toInt() } },
+                    onClick = {
+                        onClickUser(item.get { threadInfo.userId })
+                    },
+                )
+            }
         },
         content = {
             ThreadContent(
@@ -1109,14 +1221,20 @@ fun FeedCard(
                 forumName = item.get { threadInfo.forumName },
                 threadId = item.get { threadInfo.threadId },
             )
-            ThreadForumInfo(
-                forumName = item.get { threadInfo.forumName },
-                forumAvatar = item.get { threadInfo.avatar },
-                onClick = { onClickForum(item.get { threadInfo.forumName }) }
-            )
+            // 吧名模式下头部已展示所在吧，底部吧信息条隐藏
+            if (!LocalContext.current.appPreferences.feedCardShowForumName) {
+                ThreadForumInfo(
+                    forumName = item.get { threadInfo.forumName },
+                    forumAvatar = item.get { threadInfo.avatar },
+                    onClick = { onClickForum(item.get { threadInfo.forumName }) }
+                )
+            }
         },
         action = {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 ThreadShareBtn(
                     shareNum = item.get { threadInfo.shareNum }.toString(),
                     onClick = {},
@@ -1155,15 +1273,25 @@ fun FeedCard(
 ) {
     Card(
         header = {
-            UserHeader(
-                nameProvider = { item.get { user_name } },
-                nameShowProvider = { item.get { name_show } },
-                portraitProvider = { item.get { user_portrait } },
-                timeProvider = { item.get { create_time } },
-                onClick = {
-                    onClickUser(item.get { user_id })
-                },
-            )
+            // 吧名模式：头部显示所在吧而非作者（issue #13）
+            if (LocalContext.current.appPreferences.feedCardShowForumName) {
+                ForumHeader(
+                    forumName = item.get { forum_name },
+                    forumAvatar = null,
+                    timeProvider = { item.get { create_time } },
+                    onClick = { onClickForum(item.get { forum_name }) },
+                )
+            } else {
+                UserHeader(
+                    nameProvider = { item.get { user_name } },
+                    nameShowProvider = { item.get { name_show } },
+                    portraitProvider = { item.get { user_portrait } },
+                    timeProvider = { item.get { create_time } },
+                    onClick = {
+                        onClickUser(item.get { user_id })
+                    },
+                )
+            }
         },
         content = {
             ThreadContent(
@@ -1195,14 +1323,20 @@ fun FeedCard(
                     )
                 }
 
-            ThreadForumInfo(
-                forumName = item.get { forum_name },
-                forumAvatar = null,
-                onClick = { onClickForum(item.get { forum_name }) }
-            )
+            // 吧名模式下头部已展示所在吧，底部吧信息条隐藏
+            if (!LocalContext.current.appPreferences.feedCardShowForumName) {
+                ThreadForumInfo(
+                    forumName = item.get { forum_name },
+                    forumAvatar = null,
+                    onClick = { onClickForum(item.get { forum_name }) }
+                )
+            }
         },
         action = {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 ThreadShareBtn(
                     shareNum = item.get { share_num }.toString(),
                     onClick = {},
@@ -1270,7 +1404,7 @@ private fun ActionBtn(
         horizontalArrangement = Arrangement.Center,
     ) {
         ProvideContentColor(color = color) {
-            Box(modifier = Modifier.size(18.dp)) {
+            Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
                 icon()
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -1290,6 +1424,8 @@ fun VideoPlayer(
 ) {
     val context = LocalContext.current
     val systemUIBarsTweaker = rememberSystemUIBarsTweaker()
+    // 全屏回调触发时控制器可能尚未赋值完成，经 holder 取最新引用
+    val controllerHolder = remember { mutableStateOf<VideoPlayerController?>(null) }
     val videoPlayerController = rememberVideoPlayerController(
         source = VideoPlayerSource.Network(videoUrl),
         thumbnailUrl = thumbnailUrl,
@@ -1298,9 +1434,15 @@ fun VideoPlayer(
                 Log.i("VideoPlayer", "onFullScreenModeChanged $isFullScreen")
                 systemUIBarsTweaker.tweakStatusBarVisibility(!isFullScreen)
                 systemUIBarsTweaker.tweakNavigationBarVisibility(!isFullScreen)
+                // 竖版视频全屏保持竖屏，横版视频才转横屏（issue #9）
+                val videoSize = controllerHolder.value?.state?.value?.videoSize
                 if (isFullScreen) {
                     context.findActivity()?.requestedOrientation =
-                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                        if (videoSize != null && videoSize.second > videoSize.first) {
+                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                        }
                 } else {
                     context.findActivity()?.requestedOrientation =
                         ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -1308,6 +1450,9 @@ fun VideoPlayer(
             }
         }
     )
+    LaunchedEffect(videoPlayerController) {
+        controllerHolder.value = videoPlayerController
+    }
     val fullScreen by (videoPlayerController as DefaultVideoPlayerController).collect { isFullScreen }
     val videoPlayerContent =
         movableContentOf { isFullScreen: Boolean, playerModifier: Modifier ->

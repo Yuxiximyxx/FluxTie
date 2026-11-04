@@ -158,6 +158,8 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.Card
 import com.huanchengfly.tieba.post.ui.widgets.compose.Chip
 import com.huanchengfly.tieba.post.ui.widgets.compose.ConfirmDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.Container
+import com.huanchengfly.tieba.post.ui.widgets.compose.EmptyIllustration
+import com.huanchengfly.tieba.post.ui.widgets.compose.EmptyState
 import com.huanchengfly.tieba.post.ui.widgets.compose.ErrorScreen
 import com.huanchengfly.tieba.post.ui.widgets.compose.HorizontalDivider
 import com.huanchengfly.tieba.post.ui.widgets.compose.LazyLoad
@@ -747,8 +749,20 @@ fun ThreadPage(
             lazyListState.animateScrollToItem(1)
         }
     }
+    // 图片查看器「查看楼层」目标（issue #17）：未加载时经 Load(page=0, postId) 定位页加载
+    var waitScrollToPostId by remember { mutableStateOf(0L) }
     viewModel.onEvent<ThreadUiEvent.LoadSuccess> {
-        if (it.page > 1 || waitLoadSuccessAndScrollToFirstReply) {
+        if (waitScrollToPostId != 0L) {
+            // 「查看楼层」按 postId 定位页加载完成：滚到目标楼层（issue #17）
+            val targetPostId = waitScrollToPostId
+            waitScrollToPostId = 0L
+            val index = data.indexOfFirst { it.post.get { id } == targetPostId }
+            if (index >= 0) {
+                coroutineScope.launch { lazyListState.animateScrollToItem(2 + index) }
+            } else {
+                lazyListState.animateScrollToItem(1)
+            }
+        } else if (it.page > 1 || waitLoadSuccessAndScrollToFirstReply) {
             waitLoadSuccessAndScrollToFirstReply = false
             lazyListState.animateScrollToItem(1)
         }
@@ -781,6 +795,28 @@ fun ThreadPage(
                 curPostIds = data.map { it.post.get { id } },
             )
         )
+    }
+
+    // 图片查看器「查看楼层」跳转（issue #17）
+    onGlobalEvent<GlobalEvent.ScrollToPost>(
+        filter = { it.threadId == threadId }
+    ) { event ->
+        val index = data.indexOfFirst { it.post.get { id } == event.postId }
+        if (index >= 0) {
+            coroutineScope.launch { lazyListState.animateScrollToItem(2 + index) }
+        } else {
+            waitScrollToPostId = event.postId
+            viewModel.send(
+                ThreadUiIntent.Load(
+                    threadId = threadId,
+                    page = 0,
+                    postId = event.postId,
+                    forumId = forum?.get { id } ?: forumId,
+                    seeLz = isSeeLz,
+                    sortType = curSortType
+                )
+            )
+        }
     }
 
     val updateCollectMarkDialogState = rememberDialogState()
@@ -1891,20 +1927,9 @@ fun ThreadPage(
                                 if (!isRefreshing && data.isEmpty()) {
                                     item(key = "EmptyTip") {
                                         Container {
-                                            TipScreen(
-                                                title = { Text(text = stringResource(id = R.string.title_empty)) },
-                                                image = {
-                                                    val composition by rememberLottieComposition(
-                                                        LottieCompositionSpec.RawRes(R.raw.lottie_empty_box)
-                                                    )
-                                                    LottieAnimation(
-                                                        composition = composition,
-                                                        iterations = LottieConstants.IterateForever,
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .aspectRatio(2f)
-                                                    )
-                                                },
+                                            EmptyState(
+                                                title = stringResource(id = R.string.title_empty),
+                                                illustration = EmptyIllustration.Box,
                                                 actions = {
                                                     if (canReload) {
                                                         Button(onClick = { reload() }) {
