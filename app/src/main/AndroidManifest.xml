@@ -307,6 +307,40 @@
                 android:resource="@xml/shortcut_new" />
         </activity-alias>
 
+        <activity-alias
+            android:name=".MainActivityIconNight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_night"
+            android:roundIcon="@mipmap/ic_launcher_night_round"
+            android:targetActivity=".MainActivityV2">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tblite" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <data
+                    android:host="unidispatch"
+                    android:scheme="com.baidu.tieba" />
+
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.BROWSABLE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcut_new" />
+        </activity-alias>
+
         <activity
             android:name=".activities.OKSignActivity"
             android:excludeFromRecents="true"

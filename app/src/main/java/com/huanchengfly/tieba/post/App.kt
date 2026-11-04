@@ -111,6 +111,14 @@ class App : Application(), SketchFactory {
         }
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 系统日夜间切换时同步默认启动图标（夜间别名真切换）；
+        // setIcon 内部状态无变化时会跳过，手动选了其他图标的用户也不受影响。
+        // 同样涉及 PackageManager IPC，放后台线程执行
+        thread { AppIconUtil.setIcon() }
+    }
+
     /**
      * 主题默认值迁移（条件幂等，无需标记键）：
      * 对「从未主动选择主题」的用户（use_seed_theme != true 且 useDynamicColorTheme != true）
