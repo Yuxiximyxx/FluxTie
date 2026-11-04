@@ -31,7 +31,7 @@
 
 签名为自有证书：与上游同包名、不同证书，**安装本 fork 版前需先卸载上游版**，之后可直接覆盖升级。
 
-当前版本：**v1.1.0-fork.7** —— [Release 下载](https://github.com/Yuxiximyxx/FluxTie/releases/tag/v1.1.0-fork.7)
+当前版本：**v1.1.0-fork.8** —— [Release 下载](https://github.com/Yuxiximyxx/FluxTie/releases/tag/v1.1.0-fork.8)
 
 <p align="center">
   <img src="docs/images/showcase_hero.png?v=1.1.0" alt="FluxTie 主视觉" />
