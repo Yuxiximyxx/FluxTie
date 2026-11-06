@@ -74,7 +74,7 @@ class UpdateManager @Inject constructor(
         }
     }
 
-    /** 启动静默检查（默认开；发现新版本且未被忽略才弹窗）。 */
+    /** 启动静默检查（默认开；按用户设置的频率节流，发现新版本且未被忽略才提示）。 */
     fun autoCheckIfNeeded() {
         scope.launch {
             if (downloadJob?.isActive != true) {
@@ -83,7 +83,15 @@ class UpdateManager @Inject constructor(
                 notification.cancel()
             }
             if (!context.appPreferences.autoCheckUpdate) return@launch
-            // fork.7：开屏已删除，不再等待开屏结束信号；保留短延迟避开冷启动首帧
+            // 频率节流：0=每次启动；其余按距上次检查的天数门槛
+            val intervalDays = context.appPreferences.autoCheckIntervalDays?.toLongOrNull() ?: 0L
+            val lastCheckAt = context.appPreferences.lastAutoCheckAt
+            if (intervalDays > 0 && lastCheckAt > 0 &&
+                System.currentTimeMillis() - lastCheckAt < intervalDays * 86_400_000L
+            ) {
+                return@launch
+            }
+            // fork：开屏已删除，不等待开屏结束信号；保留下面的短延迟避开冷启动首帧
             delay(600)
             if (!context.appPreferences.autoCheckUpdate) return@launch
             if (_state.value != UpdateUiState.Idle) return@launch
@@ -107,11 +115,20 @@ class UpdateManager @Inject constructor(
                 prereleaseChannel = context.appPreferences.checkCIUpdate
             )) {
                 is CheckResult.Found -> {
+                    if (!manual) {
+                        // 记录本次自动检查时间，供频率节流
+                        context.appPreferences.lastAutoCheckAt = System.currentTimeMillis()
+                    }
                     if (!manual && result.release.version == context.appPreferences.ignoredUpdateVersion) {
                         _state.value = UpdateUiState.Idle
                     } else {
                         _state.value = UpdateUiState.Available(result.release, manual)
-                        _dialogVisible.value = true
+                        if (!manual && context.appPreferences.autoDownloadUpdate) {
+                            // 静默后台下载：不弹窗，进度走通知，完成后发「可以安装」
+                            download()
+                        } else {
+                            _dialogVisible.value = true
+                        }
                     }
                 }
                 CheckResult.UpToDate -> {
@@ -119,6 +136,7 @@ class UpdateManager @Inject constructor(
                         _state.value = UpdateUiState.UpToDate
                         _dialogVisible.value = true
                     } else {
+                        context.appPreferences.lastAutoCheckAt = System.currentTimeMillis()
                         _state.value = UpdateUiState.Idle
                     }
                 }
@@ -150,12 +168,20 @@ class UpdateManager @Inject constructor(
             _dialogVisible.value = false
             return
         }
+        // 已有同名安装包直接复用（如静默下载完成后再点「安装」/重进弹窗场景）
+        val fileName = "FluxTie-v${release.version}.apk"
+        downloader.cachedApk(fileName)?.let { cached ->
+            _state.value = UpdateUiState.Downloaded(release, cached)
+            notification.showComplete()
+            _dialogVisible.value = true
+            return
+        }
         downloadJob = scope.launch {
             _state.value = UpdateUiState.Downloading(release, 0, asset.size <= 0)
             var lastNotifiedPercent = -1
             var lastNotifyAt = 0L
             runCatching {
-                downloader.download(asset.url, "FluxTie-v${release.version}.apk") { read, total ->
+                downloader.download(asset.url, fileName) { read, total ->
                     val indeterminate = total <= 0
                     val percent = if (indeterminate) 0 else (read * 100 / total).toInt().coerceIn(0, 100)
                     _state.value = UpdateUiState.Downloading(release, percent, indeterminate)

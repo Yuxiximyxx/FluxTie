@@ -7,24 +7,31 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.OfflineBolt
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -50,6 +58,7 @@ import com.huanchengfly.tieba.post.models.database.Account
 import com.huanchengfly.tieba.post.ui.common.theme.compose.ExtendedTheme
 import com.huanchengfly.tieba.post.ui.page.LocalNavigator
 import com.huanchengfly.tieba.post.ui.page.ProvideNavigator
+import com.huanchengfly.tieba.post.ui.page.destinations.SettingsSearchPageDestination
 import com.huanchengfly.tieba.post.ui.page.destinations.AccountManagePageDestination
 import com.huanchengfly.tieba.post.ui.page.destinations.BlockSettingsPageDestination
 import com.huanchengfly.tieba.post.ui.page.destinations.CustomSettingsPageDestination
@@ -59,15 +68,18 @@ import com.huanchengfly.tieba.post.ui.page.destinations.MemeEmoticonPageDestinat
 import com.huanchengfly.tieba.post.ui.page.destinations.OKSignSettingsPageDestination
 import com.huanchengfly.tieba.post.ui.page.settings.components.AppearanceCard
 import com.huanchengfly.tieba.post.ui.page.settings.components.CardDivider
+import com.huanchengfly.tieba.post.ui.page.settings.components.ListSettingRow
 import com.huanchengfly.tieba.post.ui.page.settings.components.SectionLabel
 import com.huanchengfly.tieba.post.ui.page.settings.components.SettingRow
 import com.huanchengfly.tieba.post.ui.page.settings.components.SwitchSettingRow
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.BackNavigationIcon
+import com.huanchengfly.tieba.post.ui.widgets.compose.debounceClickable
 import com.huanchengfly.tieba.post.ui.widgets.compose.LocalSnackbarHostState
 import com.huanchengfly.tieba.post.ui.widgets.compose.MyScaffold
 import com.huanchengfly.tieba.post.ui.widgets.compose.Sizes
 import com.huanchengfly.tieba.post.ui.widgets.compose.TitleCentredToolbar
+import com.huanchengfly.tieba.post.ui.widgets.compose.Toolbar
 import com.huanchengfly.tieba.post.utils.AccountUtil.LocalAccount
 import com.huanchengfly.tieba.post.utils.ImageCacheUtil
 import com.huanchengfly.tieba.post.utils.StringUtil
@@ -92,10 +104,17 @@ internal fun LeadingIcon(
  * 设置主页：按功能域分为「账号 / 个性化 / 内容与浏览 / 功能 / 通用」五组
  * （参考 FlClash 的功能域分组）。
  */
+/** 设置主页各分组 itemKey（顺序即列表顺序），供搜索锚点定位。 */
+private val settingsItemKeys = listOf(
+    "account_label", "account", "personal_label", "personal", "content_label",
+    "content", "feature_label", "feature", "general_label", "general"
+)
+
 @Destination
 @Composable
 fun SettingsPage(
     navigator: DestinationsNavigator,
+    anchor: String = "",
 ) {
     ProvideNavigator(navigator = navigator) {
         val account = LocalAccount.current
@@ -111,6 +130,24 @@ fun SettingsPage(
                     },
                     navigationIcon = {
                         BackNavigationIcon(onBackPressed = { navigator.navigateUp() })
+                    },
+                    actions = {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .debounceClickable(
+                                    indication = LocalIndication.current,
+                                    onClick = { navigator.navigate(SettingsSearchPageDestination) }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = stringResource(id = R.string.tip_settings_search_hint),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
                 )
             },
@@ -130,40 +167,52 @@ fun SettingsPage(
                 cacheSize = withContext(Dispatchers.IO) { ImageCacheUtil.getCacheSize(context) }
             }
 
+            // 设置搜索锚点定位：itemKey 与 SettingsSearchIndex 的 anchor 一一对应
+            val listState = rememberLazyListState()
+            LaunchedEffect(anchor) {
+                if (anchor.isNotBlank()) {
+                    val index = settingsItemKeys.indexOf(anchor)
+                    if (index >= 0) {
+                        kotlinx.coroutines.delay(150)
+                        listState.animateScrollToItem(index)
+                    }
+                }
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 // ── 账号
-                item {
+                item(key = "account_label") {
                     SectionLabel(text = stringResource(id = R.string.title_settings_group_account))
                 }
-                item {
+                item(key = "account") {
                     AppearanceCard {
                         AccountRow(account = account)
                     }
                 }
 
                 // ── 个性化
-                item {
+                item(key = "personal_label") {
                     SectionLabel(text = stringResource(id = R.string.title_settings_group_personal))
                 }
-                item {
+                item(key = "personal") {
                     AppearanceCard {
                         SettingRow(
                             icon = ImageVector.vectorResource(id = R.drawable.ic_brush_black_24dp),
                             title = stringResource(id = R.string.title_settings_custom),
                             summary = stringResource(id = R.string.summary_settings_custom),
-                            onClick = { navigator.navigate(CustomSettingsPageDestination) }
+                            onClick = { navigator.navigate(CustomSettingsPageDestination()) }
                         )
                         CardDivider()
                         SettingRow(
                             icon = ImageVector.vectorResource(id = R.drawable.ic_dashboard_customize_black_24),
                             title = stringResource(id = R.string.title_settings_read_habit),
                             summary = stringResource(id = R.string.summary_settings_habit),
-                            onClick = { navigator.navigate(HabitSettingsPageDestination) }
+                            onClick = { navigator.navigate(HabitSettingsPageDestination()) }
                         )
                         CardDivider()
                         SettingRow(
@@ -176,10 +225,10 @@ fun SettingsPage(
                 }
 
                 // ── 内容与浏览
-                item {
+                item(key = "content_label") {
                     SectionLabel(text = stringResource(id = R.string.title_settings_group_content))
                 }
-                item {
+                item(key = "content") {
                     AppearanceCard {
                         SettingRow(
                             icon = ImageVector.vectorResource(id = R.drawable.ic_settings_block),
@@ -210,10 +259,10 @@ fun SettingsPage(
                 }
 
                 // ── 功能
-                item {
+                item(key = "feature_label") {
                     SectionLabel(text = stringResource(id = R.string.title_settings_group_feature))
                 }
-                item {
+                item(key = "feature") {
                     AppearanceCard {
                         SettingRow(
                             icon = ImageVector.vectorResource(id = R.drawable.ic_rocket_launch_black_24),
@@ -225,10 +274,10 @@ fun SettingsPage(
                 }
 
                 // ── 通用
-                item {
+                item(key = "general_label") {
                     SectionLabel(text = stringResource(id = R.string.title_settings_group_general))
                 }
-                item {
+                item(key = "general") {
                     AppearanceCard {
                         SettingRow(
                             icon = Icons.Outlined.OfflineBolt,
@@ -280,6 +329,31 @@ fun SettingsPage(
                             key = "auto_check_update",
                             defaultValue = true,
                         )
+                        if (context.appPreferences.autoCheckUpdate) {
+                            CardDivider()
+                            ListSettingRow(
+                                icon = Icons.Outlined.Schedule,
+                                title = stringResource(id = R.string.title_auto_check_interval),
+                                entries = mapOf(
+                                    "0" to stringResource(id = R.string.interval_every_launch),
+                                    "1" to stringResource(id = R.string.interval_daily),
+                                    "3" to stringResource(id = R.string.interval_3_days),
+                                    "7" to stringResource(id = R.string.interval_weekly),
+                                    "14" to stringResource(id = R.string.interval_biweekly),
+                                    "30" to stringResource(id = R.string.interval_monthly),
+                                ),
+                                defaultValue = "0",
+                                key = "auto_check_interval_days",
+                            )
+                            CardDivider()
+                            SwitchSettingRow(
+                                icon = Icons.Outlined.CloudDownload,
+                                title = stringResource(id = R.string.title_auto_download_update),
+                                summary = stringResource(id = R.string.tip_auto_download_update),
+                                key = "auto_download_update",
+                                defaultValue = false,
+                            )
+                        }
                         if (context.appPreferences.showExperimentalFeatures) {
                             CardDivider()
                             SwitchSettingRow(
