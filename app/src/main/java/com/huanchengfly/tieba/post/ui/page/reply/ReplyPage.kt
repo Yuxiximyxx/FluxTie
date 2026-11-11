@@ -524,6 +524,25 @@ internal fun ReplyPageContent(
                 modifier = Modifier.weight(1f),
                 fontWeight = FontWeight.Bold
             )
+            // 草稿一键清空：有内容才出现，点掉整段长草稿不用逐字删
+            if (textLength > 0) {
+                val draftHapticFeedback = LocalHapticFeedback.current
+                Text(
+                    text = stringResource(id = R.string.button_clear_draft),
+                    style = MaterialTheme.typography.caption,
+                    color = ExtendedTheme.colors.textSecondary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            draftHapticFeedback.performHapticFeedback(
+                                HapticFeedbackType.TextHandleMove
+                            )
+                            editTextView?.setText("")
+                            coroutineScope.launch { DatabaseUtil.deleteDraft(hash) }
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
             Text(
                 text = "$textLength",
                 style = MaterialTheme.typography.caption,
@@ -1050,6 +1069,7 @@ private fun ClassicEmoticonGrid(
         EmoticonManager.getAllEmoticon()
             .filter { it.name.isNotEmpty() }
     }
+    val hapticFeedback = LocalHapticFeedback.current
     LazyVerticalGrid(
         columns = GridCells.Adaptive(48.dp),
         modifier = Modifier
@@ -1072,7 +1092,11 @@ private fun ClassicEmoticonGrid(
                 modifier = Modifier
                     .size(48.dp)
                     .padding(8.dp)
-                    .clickable { onEmoticonClick(emoticon) },
+                    .clickable {
+                        // 与全站触感口径一致：插入表情轻震一下
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onEmoticonClick(emoticon)
+                    },
             )
         }
     }
@@ -1128,7 +1152,13 @@ private fun MemeEmoticonGrid(
                             }
                             .pointerInput(meme.id) {
                                 detectTapGestures(
-                                    onTap = { onClick(meme) },
+                                    onTap = {
+                                        // 与经典表情网格同口径：插入轻震
+                                        hapticFeedback.performHapticFeedback(
+                                            HapticFeedbackType.TextHandleMove
+                                        )
+                                        onClick(meme)
+                                    },
                                     onLongPress = { offset ->
                                         hapticFeedback.performHapticFeedback(
                                             HapticFeedbackType.LongPress

@@ -123,7 +123,32 @@ object EmoticonManager {
         "红领巾" to "image_emoticon82",
         "蜡烛" to "image_emoticon83",
         "三道杠" to "image_emoticon84",
+        // 61 之后的新一批表情：名字来自服务端 rich_abstract 的 name/id 对照，早期只存在缓存里，
+        // 这里固化为默认表，缓存作废后也不会从面板消失
+        "小乖" to "image_emoticon66",
+        "捂嘴笑" to "image_emoticon67",
+        "你懂的" to "image_emoticon68",
+        "what" to "image_emoticon69",
+        "笑尿" to "image_emoticon72",
+        "挖鼻" to "image_emoticon73",
+        "吃瓜" to "image_emoticon86",
+        "喝酒" to "image_emoticon87",
+        "欢呼" to "image_emoticon95",
+        "奥特曼" to "image_emoticon125",
+        "不听" to "image_emoticon126",
+        "望远镜" to "image_emoticon128",
+        "鼠2" to "image_emoticon137",
     )
+
+    /**
+     * 表情映射表版本。
+     *
+     * 旧版本的缓存把「首次见到的 name/id」写死并永久覆盖默认表，一旦某次登记错了
+     * （例如把 `呵呵` 记成 `image_emoticon11`），后续所有帖子都会按错误 id 渲染，
+     * 且没有任何自愈路径。版本号递增后，旧缓存的 mapping 不再被信任，只保留 ids，
+     * 默认表重建后再接受运行时观察到的对照。
+     */
+    private const val MAPPING_VERSION = 2
 
     private lateinit var contextRef: WeakReference<Context>
     private val emoticonIds: MutableList<String> = mutableListOf()
@@ -168,39 +193,68 @@ object EmoticonManager {
     }
 
     /**
-     * 为文本中出现的个人表情（`MemeEmoticon#key` 注解）构建 InlineContent。
+     * 为文本中出现的个人表情（`MemeEmoticon#{key}|{w}|{h}` 注解）构建 InlineContent。
      * 仅构建文本中实际出现且本地有 URL 的表情，避免全量构建。
+     *
+     * @param stickerSize true 时按贴纸口径展示：按 sharpText 携带的原始宽高比适配进
+     * [EmoticonUtil.MEME_STICKER_SIZE_DP] 方框（宽高缺失按 1:1）；false 时退回单行行高（信息流摘要等紧凑场景）
      */
     fun buildMemeInlineContent(
         text: AnnotatedString,
-        sizePx: Float
+        sizePx: Float,
+        stickerSize: Boolean = true,
     ): Map<String, InlineTextContent> {
-        val keys = text.getStringAnnotations(EmoticonUtil.INLINE_CONTENT_TAG, 0, text.length)
+        val entries = text.getStringAnnotations(EmoticonUtil.INLINE_CONTENT_TAG, 0, text.length)
             .mapNotNull { annotation ->
                 annotation.item
                     .takeIf { it.startsWith(EmoticonUtil.MEME_INLINE_PREFIX) }
                     ?.removePrefix(EmoticonUtil.MEME_INLINE_PREFIX)
+                    ?.split('|')
+                    ?.takeIf { it.size == 3 }
+                    ?.let { (key, w, h) ->
+                        Triple(key, w.toIntOrNull() ?: 0, h.toIntOrNull() ?: 0)
+                    }
             }
-            .distinct()
-            .filter { memeEmoticonMap.containsKey(it) }
-        if (keys.isEmpty()) return emptyMap()
-        return keys.associate { key ->
-            "${EmoticonUtil.MEME_INLINE_PREFIX}$key" to InlineTextContent(
+            .distinctBy { it.first }
+            .filter { (key, _, _) -> memeEmoticonMap.containsKey(key) }
+        if (entries.isEmpty()) return emptyMap()
+        val stickerMaxPx = EmoticonUtil.MEME_STICKER_SIZE_DP *
+            App.INSTANCE.resources.displayMetrics.density
+        return entries.associate { (key, width, height) ->
+            val (drawWidth, drawHeight) = if (stickerSize) {
+                fitMemeBox(width, height, stickerMaxPx)
+            } else {
+                sizePx to sizePx
+            }
+            "${EmoticonUtil.MEME_INLINE_PREFIX}$key|$width|$height" to InlineTextContent(
                 placeholder = Placeholder(
-                    sizePx.pxToSp().sp,
-                    sizePx.pxToSp().sp,
+                    drawWidth.pxToSp().sp,
+                    drawHeight.pxToSp().sp,
                     PlaceholderVerticalAlign.TextCenter
                 ),
                 children = {
                     AsyncImage(
                         imageUri = memeEmoticonMap[key].orEmpty(),
                         contentDescription = stringResource(id = R.string.emoticon, key),
-                        modifier = Modifier.size(sizePx.pxToDp().dp)
+                        modifier = Modifier.size(
+                            drawWidth.pxToDp().dp,
+                            drawHeight.pxToDp().dp
+                        )
                     )
                 }
             )
         }
     }
+
+    /** 原始宽高比适配进 maxSide 正方形（宽高缺失按 1:1 处理） */
+    private fun fitMemeBox(width: Int, height: Int, maxSide: Float): Pair<Float, Float> =
+        if (width <= 0 || height <= 0) {
+            maxSide to maxSide
+        } else if (width >= height) {
+            maxSide to maxSide * height / width
+        } else {
+            maxSide * width / height to maxSide
+        }
 
     fun getEmoticonInlineContent(
         sizePx: Float
@@ -247,7 +301,10 @@ object EmoticonManager {
             emoticonIds.addAll(it)
         }
         emoticonMapping.putAll(DEFAULT_EMOTICON_MAPPING)
-        emoticonMapping.putAll(emoticonCache.mapping)
+        // 只信任当前版本写出的映射；旧缓存的对照可能是错误登记（issue #31/#33），重建后自然修正
+        if (emoticonCache.version >= MAPPING_VERSION) {
+            emoticonMapping.putAll(emoticonCache.mapping)
+        }
         updateCache()
         coroutineScope.launch {
             withContext(Dispatchers.IO) {
@@ -263,7 +320,7 @@ object EmoticonManager {
             if (emoticonDataCacheFile.exists() || emoticonDataCacheFile.createNewFile()) {
                 FileUtil.writeFile(
                     emoticonDataCacheFile,
-                    EmoticonCache(emoticonIds, emoticonMapping).toJson(),
+                    EmoticonCache(MAPPING_VERSION, emoticonIds, emoticonMapping).toJson(),
                     false
                 )
             }
