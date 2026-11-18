@@ -102,6 +102,7 @@ import com.huanchengfly.tieba.post.ui.utils.DevicePosture
 import com.huanchengfly.tieba.post.ui.utils.isBookPosture
 import com.huanchengfly.tieba.post.ui.utils.isSeparating
 import com.huanchengfly.tieba.post.update.UpdateManager
+import com.huanchengfly.tieba.post.ui.widgets.compose.AppSplashOverlay
 import com.huanchengfly.tieba.post.ui.widgets.compose.AlertDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.AvatarIcon
@@ -118,6 +119,7 @@ import com.huanchengfly.tieba.post.utils.JobServiceUtil
 import com.huanchengfly.tieba.post.utils.PermissionUtils
 import com.huanchengfly.tieba.post.utils.PickMediasRequest
 import com.huanchengfly.tieba.post.utils.QuickPreviewUtil
+import com.huanchengfly.tieba.post.utils.StartupMetrics
 import com.huanchengfly.tieba.post.utils.ThemeUtil
 import com.huanchengfly.tieba.post.utils.TiebaUtil
 import com.huanchengfly.tieba.post.utils.compose.LaunchActivityForResult
@@ -425,11 +427,19 @@ class MainActivityV2 : BaseComposeActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // fork.7：开屏动画与图标已删除。installSplashScreen 仅保留 AndroidX 兼容库与
-        // Theme.Splash 的契约调用、不再设置退场动画监听；启动窗即 Theme.Splash 的
-        // 纯色空白帧（无图标、无动画），首帧绘制完成直接交接主界面。
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
+        splashScreen.setOnExitAnimationListener { splashScreenViewProvider ->
+            com.huanchengfly.tieba.post.ui.widgets.compose.SplashState.markSystemSplashDismissed()
+            splashScreenViewProvider.view.animate()
+                .alpha(0f)
+                .setDuration(240L)
+                .withEndAction {
+                    splashScreenViewProvider.remove()
+                }
+                .start()
+        }
         super.onCreate(savedInstanceState)
+        StartupMetrics.mark("activity_created")
         window.decorView.setBackgroundColor(0)
         window.setBackgroundDrawable(ColorDrawable(0))
         launch {
@@ -440,12 +450,12 @@ class MainActivityV2 : BaseComposeActivity() {
             handleUpdateIntent(it)
         }
         launch {
-            // 延迟请求，避免冷启动首帧即弹窗打断
+            // 延迟到应用内启动屏结束后再请求，避免弹窗被遮挡/打断
             delay(2600)
             requestNotificationPermission()
         }
         launch {
-            // 启动静默检查更新（开关关闭时不打扰）
+            // 启动静默检查更新（内部等启动屏结束；开关关闭时不打扰）
             updateManager.autoCheckIfNeeded()
         }
     }
@@ -610,7 +620,9 @@ class MainActivityV2 : BaseComposeActivity() {
 
                 // 预测性返回开关:关闭时以高优先级回调接管返回,直接执行导航弹栈
                 // (无手势预览),系统级 predictive back 预览由 manifest 的
-                // enableOnBackInvokedCallback + navigation 库在开关开启时生效
+                // enableOnBackInvokedCallback + navigation 库在开关开启时生效。
+                // 回调只在导航栈可弹时启用：栈底时放行系统返回，否则侧滑/返回键
+                // 会被这里的空 navigateUp() 吃掉，无法退出应用（issue #43）
                 val predictiveBack by rememberPreferenceAsState(
                     key = booleanPreferencesKey("predictive_back"),
                     defaultValue = true
@@ -618,11 +630,15 @@ class MainActivityV2 : BaseComposeActivity() {
                 if (!predictiveBack) {
                     val backDispatcher = LocalOnBackPressedDispatcherOwner.current
                     val backCallback = remember(navController) {
-                        object : OnBackPressedCallback(true) {
+                        object : OnBackPressedCallback(false) {
                             override fun handleOnBackPressed() {
                                 navController.navigateUp()
                             }
                         }
+                    }
+                    val isAtRoot = currentDestination?.route == NavGraphs.root.startRoute.route
+                    SideEffect {
+                        backCallback.isEnabled = !isAtRoot
                     }
                     DisposableEffect(backDispatcher) {
                         backDispatcher?.onBackPressedDispatcher?.addCallback(
@@ -660,6 +676,8 @@ class MainActivityV2 : BaseComposeActivity() {
                 }
             }
         }
+
+        AppSplashOverlay()
     }
 
     @Composable

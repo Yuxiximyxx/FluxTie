@@ -83,6 +83,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.ViewCompact
+import com.huanchengfly.tieba.post.ui.page.settings.components.settingsListContentPadding
 import com.huanchengfly.tieba.post.App
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
@@ -264,7 +265,7 @@ fun CustomSettingsPage(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(vertical = 8.dp)
+            contentPadding = settingsListContentPadding()
         ) {
             // ── 主题模式
             item(key = "theme_mode_label") {
@@ -562,6 +563,14 @@ fun CustomSettingsPage(
                         summary = stringResource(id = R.string.tip_feed_card_show_forum_name_summary),
                         key = "feed_card_show_forum_name",
                         defaultValue = false,
+                    )
+                    CardDivider()
+                    SwitchSettingRow(
+                        icon = Icons.Rounded.Animation,
+                        title = stringResource(id = R.string.title_splash_animation),
+                        summary = stringResource(id = R.string.tip_splash_animation_summary),
+                        key = "splash_animation_enabled",
+                        defaultValue = true,
                     )
                 }
             }

@@ -41,6 +41,7 @@ import com.github.panpf.sketch.request.internal.RequestContext
 import com.huanchengfly.tieba.post.components.ClipBoardLinkDetector
 import com.huanchengfly.tieba.post.components.OAIDGetter
 
+import com.huanchengfly.tieba.post.im.ImManager
 import com.huanchengfly.tieba.post.ui.common.theme.compose.dynamicTonalPalette
 import com.huanchengfly.tieba.post.ui.common.theme.interfaces.ThemeSwitcher
 import com.huanchengfly.tieba.post.ui.common.theme.utils.ThemeUtils
@@ -51,6 +52,7 @@ import com.huanchengfly.tieba.post.utils.ClientUtils
 import com.huanchengfly.tieba.post.utils.DEFAULT_SEED_COLOR
 import com.huanchengfly.tieba.post.utils.EmoticonManager
 import com.huanchengfly.tieba.post.utils.SharedPreferencesUtil
+import com.huanchengfly.tieba.post.utils.StartupMetrics
 import com.huanchengfly.tieba.post.utils.ThemeUtil
 import com.huanchengfly.tieba.post.utils.Util
 import com.huanchengfly.tieba.post.utils.appPreferences
@@ -90,11 +92,14 @@ class App : Application(), SketchFactory {
     override fun onCreate() {
         INSTANCE = this
         super.onCreate()
+        StartupMetrics.mark("application_created")
         ClientUtils.init(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             setWebViewPath(this)
         }
         AccountUtil.init(this)
+        // 登录态下启动 IM 私信长连接（内部自幂等，未登录不启动）
+        ImManager.onAppStart()
         migrateThemeDefaults()
         val isSelfBuild = applicationMetaData.getBoolean("is_self_build")
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
